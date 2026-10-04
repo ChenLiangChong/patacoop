@@ -1,0 +1,8 @@
+#!/bin/bash
+# tomission <instance> : launcher -> camp -> world map -> HQ -> sortie (Yes) -> mission
+i=${1:-0}; . "$(dirname "$0")/env.sh"
+$T/tohq $i >/dev/null
+$T/ge $i <<<'return Press(VirtualPad.GotoBattle, 6);' >/dev/null; sleep 6
+$T/ge $i <<<'return Press(VirtualPad.Up, 4);' >/dev/null; sleep 2
+$T/ge $i <<<'return Press(VirtualPad.Cross, 8);' >/dev/null; sleep 15
+$T/ge $i <<<'var g = P2.Game.Game.pGame_g; return g == null ? "no game" : "in mission, phase " + g.gamePhase_;'

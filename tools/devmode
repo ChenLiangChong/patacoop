@@ -1,0 +1,9 @@
+#!/bin/bash
+# devmode : back to the development setup (two windowed muted copies with sandboxed saves and the eval server)
+set -e
+. "$(dirname "$0")/env.sh"
+powershell.exe -NoProfile -NonInteractive -Command "Get-Process PATAPON12_REPLAY -EA SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 2" >/dev/null
+[ -d "$G/BepInEx/dev-disabled/PataCoop.Dev" ] && mv "$G/BepInEx/dev-disabled/PataCoop.Dev" "$G/BepInEx/plugins/"
+sed -i '/^single-instance=/d' "$G/PATAPON12_REPLAY_Data/boot.config"
+printf '2383200' > "$G/steam_appid.txt"
+echo "dev mode: plugins = $(ls "$G/BepInEx/plugins" | tr '\n' ' ')"

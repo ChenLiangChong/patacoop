@@ -1,0 +1,5 @@
+#!/bin/bash
+# round : from the camp (room already set up), both copies deploy into the current story mission again
+. "$(dirname "$0")/env.sh"
+(FROMCAMP=1 $T/tomission 0 > $S/tm0.log 2>&1 &); sleep 25; (FROMCAMP=1 $T/tomission 1 > $S/tm1.log 2>&1 &); sleep ${WAIT:-90}
+for i in 0 1; do $T/ge $i <<<'var g = P2.Game.Game.pGame_g; return $"[{Instance}] game={(g==null?"none":g.gamePhase_.ToString())} battle={PataCoop.Coop.Battle.Active} state={PataCoop.Coop.Battle.State} sent={PataCoop.Coop.Battle.Sent} got={PataCoop.Coop.Battle.Received} | {PataCoop.Coop.Session.LastEvent}";' | head -1; done

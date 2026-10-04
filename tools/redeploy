@@ -1,0 +1,12 @@
+#!/bin/bash
+# redeploy [count] : stop games, copy freshly built dev plugin, relaunch <count> windowed muted copies
+set -e
+n=${1:-2}
+. "$(dirname "$0")/env.sh"
+P=$G/BepInEx/plugins
+powershell.exe -NoProfile -NonInteractive -Command "Get-Process PATAPON12_REPLAY -EA SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 3" >/dev/null
+cp "$REPO"/dev/bin/Release/net6.0/PataCoop.Dev.dll "$REPO"/dev/bin/Release/net6.0/Iced.dll "$P/PataCoop.Dev/"
+[ -f "$REPO"/plugin/bin/Release/net6.0/PataCoop.dll ] && mkdir -p "$P/PataCoop" && cp "$REPO"/plugin/bin/Release/net6.0/PataCoop.dll "$REPO"/plugin/bin/Release/net6.0/LiteNetLib.dll "$P/PataCoop/" || true
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(wslpath -w "$T"/devlaunch.ps1)" -Count $n -Exe "$(wslpath -w "$G"/PATAPON12_REPLAY.exe)" | tr -d '\r'
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(wslpath -w "$T"/mute.ps1)" | tr -d '\r'
+"$T"/gping

@@ -1,0 +1,19 @@
+#!/bin/bash
+# cooptest4 [--no-redeploy] : N (default 4) dev copies; host on 0, the rest join; FULL=1 gives everyone a full army; all deploy
+. "$(dirname "$0")/env.sh"
+N=${N:-4}; LAST=$((N-1)); NAMES=(Alice Bob Carol Dave)
+[ "$1" != "--no-redeploy" ] && timeout 500 $T/redeploy $N | tail -$((N+1))
+for i in $(seq 0 $LAST); do $T/tocamp $i >/dev/null & sleep 3; done; wait
+# a copy has no audio session to mute until it plays sound: mute again now that all are in the camp
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(wslpath -w $T/mute.ps1)" >/dev/null
+# every copy must have the co-op plugin loaded (a copy that lost the .cfg race has none)
+for i in $(seq 0 $LAST); do r=$($T/ge $i <<<'return "plugin " + PataCoop.CoopPlugin.Version;' | head -1); [[ "$r" == plugin* ]] || { echo "[$i] co-op plugin not loaded: $r"; exit 1; }; done
+[ -n "$FULL" ] && for i in $(seq 0 $LAST); do $T/ge $i < $S/fullarmy.cs | head -1; done
+# ARM="a.cs b.cs" : extra scratchpad hooks to run in every copy before the battle
+for f in $ARM; do for i in $(seq 0 $LAST); do $T/ge $i < $S/$f | head -1; done; done
+$T/ge 0 <<<"PataCoop.CoopPlugin.PlayerName.Value = \"${NAMES[0]}\"; return PataCoop.Actions.Host();" >/dev/null; sleep 2
+for i in $(seq 1 $LAST); do $T/ge $i <<<"PataCoop.CoopPlugin.PlayerName.Value = \"${NAMES[$i]}\"; return PataCoop.Actions.Join(\"127.0.0.1\");" >/dev/null; sleep 1; done
+sleep 2
+for i in $(seq 0 $LAST); do (FROMCAMP=1 $T/tomission $i > $S/tm$i.log 2>&1 &); sleep 20; done
+sleep ${WAIT:-100}
+for i in $(seq 0 $LAST); do $T/ge $i <<<'var g = P2.Game.Game.pGame_g; int units = 0, squads = 0; if (g != null && g.getUnitMng() != null) foreach (var sq in g.getUnitMng().unitTroopPtrArray_[0].unitSquadPtrList_) { squads++; units += sq.unitBasePtrList_.Count; } return $"[{Instance}] game={(g==null?"none":g.gamePhase_.ToString())} battle={PataCoop.Coop.Battle.Active} state={PataCoop.Coop.Battle.State} squads={squads} units={units} | {PataCoop.Coop.Session.LastEvent}";' | head -1; done

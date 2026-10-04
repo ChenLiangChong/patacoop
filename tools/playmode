@@ -1,0 +1,17 @@
+#!/bin/bash
+# playmode : turn the game folder back into a normal install for real play:
+#   dev plugin (eval server, save sandbox, auto-mute) out of plugins, boot.config with single-instance back,
+#   no steam_appid.txt, the player's own display settings, co-op name back to the player's (PATACOOP_PLAYER_NAME).
+# devmode undoes it.
+set -e
+. "$(dirname "$0")/env.sh"
+powershell.exe -NoProfile -NonInteractive -Command "Get-Process PATAPON12_REPLAY -EA SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 2" >/dev/null
+mkdir -p "$G/BepInEx/dev-disabled"
+if [ -d "$G/BepInEx/plugins/PataCoop.Dev" ]; then rm -rf "$G/BepInEx/dev-disabled/PataCoop.Dev"; mv "$G/BepInEx/plugins/PataCoop.Dev" "$G/BepInEx/dev-disabled/"; fi
+[ -f "$G/PATAPON12_REPLAY_Data/boot.config.bak-claude" ] && cp "$G/PATAPON12_REPLAY_Data/boot.config.bak-claude" "$G/PATAPON12_REPLAY_Data/boot.config"
+rm -f "$G/steam_appid.txt"
+powershell.exe -NoProfile -NonInteractive -Command "reg import '$WW\backup\patapon_display_settings.reg' 2>&1 | Out-Null; 'display settings restored'" | tr -d '\r'
+# the tests renamed the co-op player (Alice, Bob...): give the real player their name back (PATACOOP_PLAYER_NAME, e.g. in tools/env.local.sh)
+[ -n "$PATACOOP_PLAYER_NAME" ] && sed -i "s/^PlayerName = .*/PlayerName = $PATACOOP_PLAYER_NAME/" "$G/BepInEx/config/com.patacoop.coop.cfg"
+echo "play mode: plugins = $(ls "$G/BepInEx/plugins" | tr '\n' ' ')"
+grep -c "single-instance" "$G/PATAPON12_REPLAY_Data/boot.config" | sed 's/^/single-instance lines in boot.config: /'

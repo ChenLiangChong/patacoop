@@ -1,0 +1,2 @@
+#!/bin/bash
+for i in 0 1 2 3; do r=$(curl.exe -s -m 3 "http://127.0.0.1:$((9100+i))/ping" 2>/dev/null | tr -d '\r'); [ -n "$r" ] && echo "$r"; done

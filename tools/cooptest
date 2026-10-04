@@ -1,0 +1,8 @@
+#!/bin/bash
+# cooptest : relaunch both dev copies, host on 0, join from 1, deploy both into the current story mission
+. "$(dirname "$0")/env.sh"
+[ "$1" != "--no-redeploy" ] && timeout 280 $T/redeploy 2 | tail -2
+$T/ge 0 <<<'PataCoop.CoopPlugin.PlayerName.Value = "Alice"; return PataCoop.Actions.Host();' >/dev/null; sleep 2
+$T/ge 1 <<<'PataCoop.CoopPlugin.PlayerName.Value = "Bob"; return PataCoop.Actions.Join("127.0.0.1");' >/dev/null; sleep 2
+($T/tomission 0 > $S/tm0.log 2>&1 &); sleep 25; ($T/tomission 1 > $S/tm1.log 2>&1 &); sleep ${WAIT:-110}
+for i in 0 1; do $T/ge $i <<<'var g = P2.Game.Game.pGame_g; return $"[{Instance}] game={(g==null?"none":g.gamePhase_.ToString())} battle={PataCoop.Coop.Battle.Active} state={PataCoop.Coop.Battle.State} sent={PataCoop.Coop.Battle.Sent} got={PataCoop.Coop.Battle.Received} syncS={PataCoop.Coop.Battle.SyncSent} syncR={PataCoop.Coop.Battle.SyncReceived} | {PataCoop.Coop.Session.LastEvent}";' | head -1; done

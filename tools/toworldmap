@@ -1,0 +1,6 @@
+#!/bin/bash
+# toworldmap <instance> : from camp start, walk right to the obelisk and open the world map
+i=${1:-0}; . "$(dirname "$0")/env.sh"
+for n in 1 2 3 4 5; do $T/ge $i <<<'return Press(VirtualPad.R, 6);' >/dev/null; sleep 3; done
+$T/ge $i <<<'return Press(VirtualPad.Cross, 6);' >/dev/null; sleep 6
+$T/ge $i <<<'var c = Labo2Application.getApplication().lgsm_g.scene_.scene_?.TryCast<P2.Bases.Camp.Scene>(); return "camp phase " + c?.controller_.getPhase();'

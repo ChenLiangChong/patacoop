@@ -1,0 +1,10 @@
+#!/bin/bash
+# co-op battle driven by Jev: N copies, every copy armed with the driver, the host's screen decides for all
+. "$(dirname "$0")/env.sh"
+N=${N:-2}; LAST=$((N-1)); GAMES=$(seq -s, 0 $LAST)
+rm -f "$W"/tmp/jev*.cmd "$W"/tmp/jev*.json
+N=$N FULL=$FULL ARM="poolwatch.cs gimtrace.cs statelog.cs jevdriver.cs" WAIT=20 timeout 1000 $T/cooptest4 2>&1 | tail -$((N+1))
+[ -n "$SPEED" ] && for i in $(seq 0 $LAST); do $T/ge $i <<<"foreach (var a in System.AppDomain.CurrentDomain.GetAssemblies()) { System.Type[] ts; try { ts = a.GetTypes(); } catch { continue; } foreach (var t in ts) if (t.Name == \"JevDriver\") t.GetField(\"Speed\").SetValue(null, $SPEED); } return \"[\" + Instance + \"] speed $SPEED\";" | head -1; done
+echo "--- jev drums"
+cd $T && python3 jevbot.py --games $GAMES --decider 0 --seconds ${SECONDS_MAX:-1500}
+echo "--- end"

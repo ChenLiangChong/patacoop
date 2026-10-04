@@ -1,0 +1,6 @@
+#!/bin/bash
+# retire <instance> : open the in-mission menu and answer "yes" to returning to the village
+i=${1:-0}; . "$(dirname "$0")/env.sh"
+$T/ge $i <<<'return Press(VirtualPad.Start, 6);' >/dev/null; sleep 3
+$T/ge $i <<<'return Press(VirtualPad.Up, 4);' >/dev/null; sleep 1
+$T/ge $i <<<'return Press(VirtualPad.Cross, 6);' >/dev/null

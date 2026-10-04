@@ -1,0 +1,14 @@
+<Project>
+  <!--
+    Where PATAPON 1+2 REPLAY is installed, with BepInEx be.785 in it and the game run once (BepInEx
+    generates BepInEx/interop on the first start; the plugins compile against those files).
+    Set it with the PATACOOP_GAME environment variable, in Directory.Build.props.user (not committed),
+    or on the command line: dotnet build -p:GameDir=...
+  -->
+  <Import Project="Directory.Build.props.user" Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.props.user')" />
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == '' and '$(PATACOOP_GAME)' != ''">$(PATACOOP_GAME)</GameDir>
+    <GameDir Condition="'$(GameDir)' == '' and '$(OS)' == 'Windows_NT'">C:\Program Files (x86)\Steam\steamapps\common\PATAPON12_REPLAY</GameDir>
+    <GameDir Condition="'$(GameDir)' == ''">/mnt/e/SteamLibrary/steamapps/common/PATAPON12_REPLAY</GameDir>
+  </PropertyGroup>
+</Project>

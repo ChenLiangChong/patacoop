@@ -1,0 +1,5 @@
+#!/bin/bash
+# ge <instance> : read C# from stdin, run it inside game instance <instance> (0,1,...) on the Unity main thread
+. "$(dirname "$0")/env.sh"; i=${1:-0}; n="snip$i-$$-$RANDOM.cs"; f="$W/tmp/$n"; cat > "$f"
+curl.exe -s -m ${GE_TIMEOUT:-60} -X POST --data-binary "@$WW\\tmp\\$n" "http://127.0.0.1:$((9100+i))/eval" 2>&1 | tr -d '\r'; echo
+rm -f "$f"

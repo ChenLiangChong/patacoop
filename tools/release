@@ -1,0 +1,35 @@
+#!/bin/bash
+# release : build the co-op plugin and pack the installer zip for players
+set -e
+export PATH=$PATH:~/.dotnet; export DOTNET_ROOT=~/.dotnet
+. "$(dirname "$0")/env.sh"
+cd "$REPO"/plugin && dotnet build -c Release 2>&1 | grep -E " error |Build succeeded" | sort -u
+ver=$(grep -oP 'Version = "\K[0-9.]+' "$REPO"/plugin/Plugin.cs)
+d="$REPO"/dist; mkdir -p "$d"/plugin
+cp "$REPO"/plugin/bin/Release/net6.0/PataCoop.dll "$REPO"/plugin/bin/Release/net6.0/LiteNetLib.dll "$d"/plugin/
+out="$W"/release; mkdir -p "$out"
+python3 - "$d" "$out/PataCoop-$ver.zip" "$ver" <<'PY'
+import sys, os, zipfile
+src, dst, ver = sys.argv[1], sys.argv[2], sys.argv[3]
+with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
+    for root, _, files in os.walk(src):
+        for f in files:
+            full = os.path.join(root, f)
+            z.write(full, os.path.join(f"PataCoop-{ver}", os.path.relpath(full, src)))
+print("packed", dst)
+PY
+# the same package for friends, with the Radmin network and host IP filled in (friend-preset.ini -> preset.ini)
+if [ -f "$REPO"/friend-preset.ini ]; then
+python3 - "$d" "$out/PataCoop-$ver-friends.zip" "$ver" "$REPO"/friend-preset.ini <<'PY'
+import sys, os, zipfile
+src, dst, ver, preset = sys.argv[1:5]
+with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
+    for root, _, files in os.walk(src):
+        for f in files:
+            full = os.path.join(root, f)
+            z.write(full, os.path.join(f"PataCoop-{ver}", os.path.relpath(full, src)))
+    text = open(preset, encoding="utf-8").read().replace("\r\n", "\n").replace("\n", "\r\n")
+    z.writestr(f"PataCoop-{ver}/preset.ini", text.encode("utf-8"))
+print("packed", dst)
+PY
+fi

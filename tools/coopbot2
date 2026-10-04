@@ -1,0 +1,22 @@
+#!/bin/bash
+# coopbot2 <seconds> : both copies keep drumming in rhythm. March; when the army stops advancing
+# (a wall, enemies in the way) or a squad has a target, attack for a while, then march again.
+. "$(dirname "$0")/env.sh"; end=$((SECONDS+${1:-300})); cur=0; last=0; moveT=$SECONDS; moveB=-99999; attackUntil=0
+Q='var g = P2.Game.Game.pGame_g; if (g == null || g.isGameEndOrder_ || g.gamePhase_ != P2.Game.Game.GamePhase.GamePhase_Play) return "END";
+var tr = g.getUnitMng().unitTroopPtrArray_[0]; bool target = false; int alive = 0;
+foreach (var sq in tr.unitSquadPtrList_) { alive += sq.unitBasePtrList_.Count; if ((sq.squadInfo_?.squadAddingParam?.rsv1 ?? 0) == 0) continue; if (sq.pTargetSquad_ != null || sq.pTargetGimmick_ != null) target = true; }
+return $"{(target ? 1 : 0)} {(int)tr.troopBasePos_[0]} units={alive} enemies={g.getUnitMng().unitTroopPtrArray_[1].unitSquadPtrList_.Count}";'
+set_cmd() { for i in ${INST:-0 1}; do $T/ge $i <<<"P2.Game.Game.pGame_g?.soundDirector_.setAutoCommand($1, 99, true); return \"ok\";" >/dev/null & done; wait; cur=$1; }
+while [ $SECONDS -lt $end ]; do
+  st=$($T/ge 0 <<<"$Q" | head -1)
+  [[ "$st" == END* || -z "$st" ]] && { echo "$(date +%T) end"; break; }
+  read -r target base rest <<<"$st"
+  if (( base > moveB + 3 )); then moveB=$base; moveT=$SECONDS; fi
+  want=1
+  if (( SECONDS < attackUntil )); then want=3
+  elif (( cur == 1 && SECONDS - moveT >= 8 )); then attackUntil=$((SECONDS+16)); want=3; fi
+  if (( want == 1 && cur == 3 )); then moveT=$SECONDS; fi
+  if [ "$want" != "$cur" ]; then set_cmd $want; echo "$(date +%T) -> $([ $want = 3 ] && echo attack || echo march) | base=$base $rest"
+  elif (( SECONDS - last >= 30 )); then last=$SECONDS; echo "$(date +%T)    base=$base $rest"; fi
+  sleep 1
+done

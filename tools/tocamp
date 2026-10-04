@@ -1,0 +1,9 @@
+#!/bin/bash
+# tocamp <instance> : launcher -> Patapon 2 -> CONTINUE -> load slot -> dismiss tip -> camp
+i=${1:-0}; . "$(dirname "$0")/env.sh"
+$T/ge $i <<<'UnityEngine.Object.FindObjectOfType<LauncherMain>().p2Button.onClick.Invoke(); return "P2";' >/dev/null
+sleep 15; $T/ge $i <<<'return Press(VirtualPad.Start, 4);' >/dev/null
+sleep 6;  $T/ge $i <<<'return Press(VirtualPad.Cross, 4);' >/dev/null
+sleep 4;  $T/ge $i <<<'return Press(VirtualPad.Cross, 4);' >/dev/null
+sleep 5;  $T/ge $i <<<'return Press(VirtualPad.Cross, 4);' >/dev/null
+sleep 8;  $T/ge $i <<<'return "scene " + UnityEngine.SceneManagement.SceneManager.GetActiveScene().name + " frame " + Time.frameCount;'

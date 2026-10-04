@@ -1,0 +1,12 @@
+#!/bin/bash
+# coopclear : host forces a mission clear, then both copies press Cross through the results back to the camp
+. "$(dirname "$0")/env.sh"
+$T/ge 0 <<<'P2.Game.Game.pGame_g.setGameEnd(P2.Game.Game.GameEndType.GameEndType_Clear); return "clear ordered";' | head -1
+for k in $(seq 1 ${ROUNDS:-24}); do
+  sleep 4
+  for i in 0 1; do $T/ge $i <<<'return Press(VirtualPad.Cross, 6);' >/dev/null & done; wait
+  st=""
+  for i in 0 1; do st="$st | $($T/ge $i <<<'var g = P2.Game.Game.pGame_g; var c = Labo2Application.getApplication().lgsm_g.scene_.scene_?.TryCast<P2.Bases.Camp.Scene>(); return $"[{Instance}] game={(g==null?"none":g.gamePhase_.ToString())} camp={(c==null?"-":c.controller_.getPhase().ToString())}";' | head -1)"; done
+  echo "$(date +%T)$st"
+  [ $(grep -oE "camp=Phase_Map_(Focus|Scroll)" <<<"$st" | wc -l) -ge 2 ] && break
+done

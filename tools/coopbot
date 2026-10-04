@@ -1,0 +1,11 @@
+#!/bin/bash
+# coopbot <seconds> : both dev copies drum attack/march in turns until the mission ends or time runs out
+. "$(dirname "$0")/env.sh"; end=$((SECONDS+${1:-240})); n=0
+while [ $SECONDS -lt $end ]; do
+  cmd=$(( n % 3 == 2 ? 1 : 2 )); n=$((n+1))   # attack, attack, march, ...
+  for i in 0 1; do $T/ge $i <<<"var g = P2.Game.Game.pGame_g; if (g == null || g.isGameEndOrder_) return \"END\"; g.soundDirector_.setAutoCommand($cmd, 4, true); return \"cmd $cmd\";" >/dev/null & done; wait
+  sleep 9
+  st=$($T/ge 0 <<<'var g = P2.Game.Game.pGame_g; return g == null ? "none" : $"{g.gamePhase_} end={g.isGameEndOrder_} base={g.getUnitMng().unitTroopPtrArray_[0].troopBasePos_[0]:F0}";' | head -1)
+  echo "$(date +%T) $st"
+  [[ "$st" == *"end=True"* || "$st" == "none" ]] && break
+done

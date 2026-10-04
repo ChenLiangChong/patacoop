@@ -1,0 +1,8 @@
+#!/bin/bash
+# around <instance> <Class::method> <hexoffset> [before=0x40] [after=0x80] : disassembly window around an offset
+i=$1; m=$2; off=$3; b=${4:-0x40}; a=${5:-0x80}
+GE_TIMEOUT=60 "$(dirname "$0")/ge" $i <<EOT
+var d = Native.Dis("$m").Split('\n'); int c = $off, lo = c - $b, hi = c + $a;
+Print(d[0]);
+Print(string.Join("\n", d.Where(l => { var t = l.Trim(); if (t.Length < 5) return false; try { int o = Convert.ToInt32(t.Split(' ')[0], 16); return o >= lo && o <= hi; } catch { return false; } })));
+EOT

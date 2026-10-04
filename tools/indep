@@ -1,0 +1,15 @@
+#!/bin/bash
+# indep <who> <cmd> : only copy <who> (0 = host Alice, 1 = guest Bob, b = both) drums <cmd> once;
+# then both copies report what every squad is doing, and screenshots are taken
+. "$(dirname "$0")/env.sh"; who=$1; cmd=${2:-3}
+Q='var g = P2.Game.Game.pGame_g; var tr = g.getUnitMng().unitTroopPtrArray_[0]; var f = tr.troopCtrl_.flagUnit_; var sb = new System.Text.StringBuilder($"[{Instance}] base={tr.troopBasePos_[0]:F0} flag={f.flagUnitModel_.pos_.x:F0} | ");
+foreach (var sq in tr.unitSquadPtrList_) { var t = sq.squadCtrl_.tpdSquadCtrlTarget_; float sum = 0; int c = 0; foreach (var u in sq.unitBasePtrList_) { var m = u.pActorModel_?.TryCast<P2.Game.Unit.UnitModel>(); if (m != null) { sum += m.mtx_.m03; c++; } }
+ string who = (sq.squadInfo_.squadAddingParam.rsv1 & 0xFF) == 0 ? "Alice" : "Bob"; if (sq.squadInfo_.squadAddingParam.rsv1 == 0) who = "mission";
+ sb.Append($"{who}: {t.ctrlType.ToString().Replace("SquadCtrlType_","")} f{t.workData.squadCtrlFuncId} x={(c>0?sum/c:0):F0} | "); }
+return sb.ToString();'
+for i in 0 1; do $T/ge $i <<<'P2.Game.Game.pGame_g.soundDirector_.setAutoCommand(-1, 0, false); return "idle";' >/dev/null & done; wait; sleep 9
+case $who in b) list="0 1";; *) list=$who;; esac
+for i in $list; do $T/ge $i <<<"P2.Game.Game.pGame_g.soundDirector_.setAutoCommand($cmd, 4, true); return \"drum\";" >/dev/null & done; wait
+sleep ${DELAY:-3.6}
+for i in 0 1; do $T/gshot $i >/dev/null & $T/ge $i <<<"$Q" | head -1 & done; wait
+sleep 2; for i in 0 1; do $T/ge $i <<<"$Q" | head -1 & done; wait

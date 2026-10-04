@@ -1,0 +1,4 @@
+#!/bin/bash
+# gshot <instance> : screenshot of game instance -> prints WSL path of the png
+. "$(dirname "$0")/env.sh"; i=${1:-0}; r=$(curl.exe -s -m 20 "http://127.0.0.1:$((9100+i))/shot?path=$WW\\shots\\i$i.png" | tr -d '\r')
+[[ "$r" == C:* ]] && wslpath -u "$r" || echo "$r"

@@ -1,0 +1,15 @@
+# build output
+bin/
+obj/
+dist/plugin/
+*.zip
+# local settings and personal data
+Directory.Build.props.user
+tools/env.local.sh
+friend-preset.ini
+*.user
+.vs/
+.vscode/
+# logs and caches
+*.log
+__pycache__/
