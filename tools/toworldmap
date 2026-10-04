@@ -1,6 +1,9 @@
 #!/bin/bash
-# toworldmap <instance> : from camp start, walk right to the obelisk and open the world map
+# toworldmap <instance> : from anywhere in the camp, walk to the obelisk and open the world map.
+# The obelisk is OBELISK_FROM_RIGHT stops left of the camp's right end (1 once the Paragate is
+# built: it is the last stop; 0 before that).
 i=${1:-0}; . "$(dirname "$0")/env.sh"
-for n in 1 2 3 4 5; do $T/ge $i <<<'return Press(VirtualPad.R, 6);' >/dev/null; sleep 3; done
+for n in $(seq 1 9); do $T/ge $i <<<'return Press(VirtualPad.R, 6);' >/dev/null; sleep 2; done
+for n in $(seq 1 ${OBELISK_FROM_RIGHT:-1}); do $T/ge $i <<<'return Press(VirtualPad.L, 6);' >/dev/null; sleep 3; done
 $T/ge $i <<<'return Press(VirtualPad.Cross, 6);' >/dev/null; sleep 6
 $T/ge $i <<<'var c = Labo2Application.getApplication().lgsm_g.scene_.scene_?.TryCast<P2.Bases.Camp.Scene>(); return "camp phase " + c?.controller_.getPhase();'

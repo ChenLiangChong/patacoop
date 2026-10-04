@@ -1,0 +1,13 @@
+#!/bin/bash
+# pickmission <instance> <missionId> : with the world map open, move its cursor to that mission
+i=${1:-0}; want=$2; . "$(dirname "$0")/env.sh"
+Q='var d = Labo2Application.getApplication()?.lgsm_g?.scene_?.scene_?.TryCast<P2.Bases.Camp.Scene>()?.controller_?.worldMap_; if (d == null) return "nomap"; int sel = d.getSelect(); int at = -1, want = -1, k = 0; foreach (var chip in d.srl_.symbol_.chips_) { var ms = chip.misstionLabel_; if (ms != null) foreach (var m in ms) if (m != null && m.isValid()) { if ((int)m.getId() == sel) at = k; if ((int)m.getId() == WANT) want = k; } k++; } return sel + " " + at + " " + want;'
+for n in $(seq 1 40); do
+  r=$($T/ge $i <<<"${Q//WANT/$want}" | head -1); read -r sel at to <<<"$r"
+  [ "$sel" = "nomap" ] && { echo "world map not open"; exit 1; }
+  [ "$sel" = "$want" ] && { echo "selected $want"; exit 0; }
+  [ "$to" = "-1" ] && { echo "mission $want is not on the map"; exit 1; }
+  if [ "$to" -lt "$at" ]; then key=Left; else key=Right; fi
+  $T/ge $i <<<"return Press(VirtualPad.$key, 6);" >/dev/null; sleep 1.5
+done
+echo "could not reach $want (at $sel)"; exit 1

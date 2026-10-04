@@ -127,7 +127,8 @@ Saves are backed up before every co-op battle to `BepInEx\PataCoop\save-backups\
 - `tools/tocamp i`: drive copy i from the launcher to the camp.
 - `tools/ge i <<<'C# code'`: evaluate C# inside copy i. It returns a string; `Press(VirtualPad.X, frames)` presses pad buttons.
 - `tools/gshot i`: screenshot.
-- `N=2 FULL=1 tools/cooptest4`: host on copy 0, the others join, everyone sorties into the same mission.
+- `tools/toworldmap i` opens the world map from anywhere in the camp. `tools/pickmission i <id>` moves its cursor to a mission; it reads the map's mission list, which also lists every unlocked mission with its type.
+- `N=2 FULL=1 tools/cooptest4`: host on copy 0, the others join, everyone sorties into the same mission (`MISSION=<id>` picks it).
   `FULL=1` gives everyone a full army. `ARM="a.cs b.cs"` arms hooks from `tools/evals`.
 - `N=2 FULL=1 SPEED=2 tools/jevcoop`: the same, plus an automatic drummer
   (`tools/jevbot.py` + `tools/evals/jevdriver.cs`). It needs a TypeSafe Jev API key in

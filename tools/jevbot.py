@@ -16,8 +16,8 @@ def work_dir():
     if os.environ.get('PATACOOP_WORK'):
         return os.environ['PATACOOP_WORK']
     import subprocess
-    profile = subprocess.run(['cmd.exe', '/c', 'echo %USERPROFILE%'], cwd='/mnt/c', capture_output=True, text=True).stdout.strip()
-    return subprocess.run(['wslpath', profile], capture_output=True, text=True).stdout.strip() + '/PataCoop'
+    profile = subprocess.run(['cmd.exe', '/c', 'echo %USERPROFILE%'], cwd='/mnt/c', stdin=subprocess.DEVNULL, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(['wslpath', profile], stdin=subprocess.DEVNULL, capture_output=True, text=True).stdout.strip() + '/PataCoop'
 
 
 TMP = work_dir() + '/tmp'

@@ -8,7 +8,7 @@ REPO=$(dirname "$T")                              # the repository
 # the game as WSL sees it (BepInEx be.785 installed, started once)
 : "${PATACOOP_GAME:=/mnt/e/SteamLibrary/steamapps/common/PATAPON12_REPLAY}"
 # a Windows-side work folder: sandboxed test saves, screenshots, eval snippets, release zips
-: "${PATACOOP_WORK:=$(wslpath "$(cd /mnt/c && cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')")/PataCoop}"
+: "${PATACOOP_WORK:=$(wslpath "$(cd /mnt/c && cmd.exe /c 'echo %USERPROFILE%' </dev/null 2>/dev/null | tr -d '\r')")/PataCoop}"
 export PATACOOP_GAME PATACOOP_WORK
 G=$PATACOOP_GAME
 W=$PATACOOP_WORK
