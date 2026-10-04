@@ -88,6 +88,25 @@ internal static class WorldSync
         if (Battle.Active) Apply(P2.Game.Game.pGame_g, _hostWeather);
     }
 
+    // ------------------------------------------------------------------ miracles
+
+    /// <summary>Guest: our miracle's rhythm succeeded and our game activates it: the host activates it too.</summary>
+    internal static void GuestMiracle(uint score)
+    {
+        CoopNet.SendTo(0, new MsgWriter(Msg.Miracle).U32(score).ToArray(), true);
+        CoopPlugin.L.LogInfo($"[coop] our miracle (score {score}) goes to the host");
+    }
+
+    /// <summary>Host: a guest's miracle succeeded: our game runs the whole of it (weather, its course, its end) and shares the weather.</summary>
+    internal static void OnMiracle(int fromSlot, MsgReader r)
+    {
+        uint score = r.U32();
+        var mc = P2.Game.Game.pGame_g?.miracleController_;
+        if (!CoopNet.IsHost || !Battle.Active || mc == null) return;
+        mc.activate(score);
+        Session.Note($"{Session.Name(fromSlot)}'s miracle", $"{Session.Name(fromSlot)} 的奇蹟生效了");
+    }
+
     private static void Apply(P2.Game.Game? game, Weather w)
     {
         var wc = game?.map_?.weatherController_;
@@ -134,4 +153,20 @@ internal static class GuestWeatherPatch
     }
 
     private static bool Prefix() => !Battle.Active || CoopNet.IsHost || WorldSync.ApplyingWeather;
+}
+
+/// <summary>
+/// A miracle is the team's, whoever drums it. When a guest's miracle rhythm succeeds, its game
+/// activates the miracle; the host's game activates the same one (the mission's own miracle, with
+/// the guest's score) and runs all of it, rain and its course over time included, and its weather
+/// reaches every guest.
+/// </summary>
+[HarmonyPatch(typeof(P2.Game.Miracle.Controller), nameof(P2.Game.Miracle.Controller.activate))]
+internal static class GuestMiraclePatch
+{
+    private static void Postfix(uint score)
+    {
+        try { if (Battle.Active && !CoopNet.IsHost) WorldSync.GuestMiracle(score); }
+        catch (Exception e) { CoopPlugin.L.LogWarning("could not send our miracle to the host: " + e.Message); }
+    }
 }

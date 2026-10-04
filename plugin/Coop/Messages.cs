@@ -37,6 +37,14 @@ internal enum Msg : byte
     HitPoints = 14,
     /// <summary>Anyone to all: I got a story key item in this battle (item id, my total this battle).</summary>
     KeyItem = 15,
+    /// <summary>Everyone to all, every frame of a co-op battle: where my army is (its base position).</summary>
+    ArmyPos = 16,
+    /// <summary>Host to all, every frame of a co-op battle: where each enemy unit stands.</summary>
+    EnemyPos = 17,
+    /// <summary>Guest to host: my army reached the goal (the host clears the mission for everyone).</summary>
+    Goal = 18,
+    /// <summary>Guest to host: our miracle succeeded (its score); the host activates it for everyone.</summary>
+    Miracle = 19,
 }
 
 internal sealed class MsgWriter

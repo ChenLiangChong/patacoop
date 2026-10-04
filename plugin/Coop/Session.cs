@@ -52,6 +52,7 @@ public static class Session
         Battle.Tick();
         WorldSync.Tick();
         Clock.Tick();
+        ArmyPositions.Tick();
         HitSync.Tick();
         Lobby.Tick();
     }
@@ -143,6 +144,18 @@ public static class Session
                     break;
                 case Msg.KeyItem:
                     KeyItems.OnKeyItem(fromSlot, r);
+                    break;
+                case Msg.ArmyPos:
+                    ArmyPositions.OnArmyPos(fromSlot, r);
+                    break;
+                case Msg.EnemyPos:
+                    ArmyPositions.OnEnemyPos(fromSlot, r);
+                    break;
+                case Msg.Goal:
+                    Battle.OnGoal(fromSlot);
+                    break;
+                case Msg.Miracle:
+                    WorldSync.OnMiracle(fromSlot, r);
                     break;
             }
         }

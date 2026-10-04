@@ -5,7 +5,7 @@ using PataCoop.Server;
 
 int port = args.Length > 0 ? int.Parse(args[0]) : 27115;
 int failures = 0;
-const byte Proto = 8; const int FindSize = 160; // RelayServer.ProtocolVersion and RelayServer.FindSize
+const byte Proto = TestClient.Protocol; const int FindSize = 160; // RelayServer.FindSize
 void Check(bool ok, string what) { Console.WriteLine((ok ? "PASS " : "FAIL ") + what); if (!ok) failures++; }
 
 var a = new TestClient("Alice", port);
@@ -122,7 +122,7 @@ b.Send(new PacketWriter(Op.CreateRoom).I32(-1));
 var already = b.Expect(Op.Refusal);
 Check(already != null && already.I32() == (int)RefuseReason.AlreadyInRoom, "creating while in a room is refused");
 
-var bad = new TestClient("Mallory", port, key: "patamod/7");
+var bad = new TestClient("Mallory", port, key: "patamod/8");
 Check(!bad.Connect(), "wrong protocol key is rejected");
 
 // --- leaving
@@ -153,7 +153,10 @@ sealed class TestClient : INetEventListener
     private readonly ConcurrentQueue<PacketReader> _inbox = new();
     private readonly ConcurrentQueue<PacketReader> _unconnected = new();
 
-    public TestClient(string name, int port, string key = "patamod/8")
+    /// <summary>RelayServer.ProtocolVersion (the default key below carries it too).</summary>
+    public const byte Protocol = 9;
+
+    public TestClient(string name, int port, string key = "patamod/9")
     {
         _name = name; _port = port; _key = key;
         _net = new NetManager(this) { DisconnectTimeout = 5000, UnconnectedMessagesEnabled = true, IPv6Enabled = false };
@@ -168,7 +171,7 @@ sealed class TestClient : INetEventListener
         return _connected;
     }
 
-    public void Hello() => Send(new PacketWriter(Op.Hello).U8(8).Str(_name).U64(76561198000000000));
+    public void Hello() => Send(new PacketWriter(Op.Hello).U8(Protocol).Str(_name).U64(76561198000000000));
     public void Send(PacketWriter w, DeliveryMethod m = DeliveryMethod.ReliableOrdered) => _peer!.Send(w.ToArray(), m);
     public void Disconnect() { _net.DisconnectAll(); _net.Stop(); }
 

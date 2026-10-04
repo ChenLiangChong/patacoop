@@ -1,0 +1,44 @@
+#!/bin/bash
+# go <instance> <camp|worldmap|hq|battle> : walk copy <instance> to that screen one small step at a time: look at the
+# state, do the one thing that screen needs (click, press), wait for the state to change, repeat. Prints every step;
+# stops and says where it is stuck. MISSION=<id> picks a mission on the world map (default: the highlighted one).
+i=${1:-0}; target=${2:-camp}; T=$(cd "$(dirname "$0")" && pwd); . "$T/env.sh"
+step() { echo "[$i] $1"; }
+sortied=""   # after "sortie, yes" the camp map shows for a moment while the mission loads: do not touch it
+downSince=""
+for n in $(seq 1 60); do
+  s=$($T/state $i)
+  # a copy that does not answer for half a minute has died or hung: say so instead of waiting on
+  if [ "$s" = down ]; then downSince=${downSince:-$(date +%s)}; [ $(( $(date +%s) - downSince )) -ge 30 ] && { echo "[$i] stuck: the game does not answer (crashed?)"; exit 1; }; else downSince=""; fi
+  case "$target:$s" in
+    camp:camp:Map_*|worldmap:camp:WorldMap*|hq:camp:HeadQuarters*|battle:battle:Play) echo "[$i] at $s"; exit 0;;
+  esac
+  case "$s" in
+    camp:Map_*|camp:WorldMap*) if [ -n "$sortied" ] && [ "$target" = battle ]; then sleep 0.5; continue; fi ;;&
+    down|logo|title:Goto*|"camp:"|battle:PlayStart|battle:Load*|NowLoading*) sleep 0.5
+      # the camp's loading tip waits for a press once loading is done
+      [ "$s" = "camp:" ] && { $T/press $i Cross >/dev/null; sleep 0.5; } ;;
+    launcher) step "launcher: Patapon 2"; $T/ge $i <<<'UnityEngine.Object.FindObjectOfType<LauncherMain>().p2Button.onClick.Invoke(); return "ok";' >/dev/null
+      $T/waitfor $i "title:Default|title:Load" 40 >/dev/null ;;
+    title:Default*) step "title: continue"; $T/press $i Cross >/dev/null; $T/waitfor $i ":load|Goto|camp" 10 >/dev/null ;;
+    title:*:load) step "title: load the save"; sleep 0.4; $T/press $i Cross >/dev/null; $T/waitfor $i "Goto|camp" 10 >/dev/null ;;
+    camp:Map_*石碑#1*) step "camp: open the world map"; $T/press $i Cross >/dev/null; $T/waitfor $i "WorldMap" 10 >/dev/null ;;
+    camp:Map_*パラゲト*) $T/press $i Left >/dev/null; $T/waitfor $i "石碑#1" 3 >/dev/null ;;
+    camp:Map_*) $T/press $i Right >/dev/null; sleep 0.5 ;;
+    camp:WorldMap*) [ "$target" = camp ] && { $T/press $i Circle >/dev/null; sleep 1; continue; }
+      if [ -n "$MISSION" ] && [[ "$s" != *":m$MISSION"* ]]; then step "world map: pick mission $MISSION"; $T/pickmission $i "$MISSION" >/dev/null || { echo "[$i] stuck: no mission $MISSION ($s)"; exit 1; }; fi
+      step "world map: enter the headquarters ($(echo "$s" | grep -o 'm[0-9]*$'))"; $T/press $i Cross >/dev/null; $T/waitfor $i "HeadQuarters" 10 >/dev/null ;;
+    camp:HeadQuarters*WaitDecide) step "headquarters: sortie, yes"; sortied=1; $T/press $i Up >/dev/null; sleep 0.3; $T/press $i Cross >/dev/null
+      $T/waitfor $i "battle|hqUpdateEnd|hqFinish" 15 >/dev/null ;;
+    camp:HeadQuarters*) [ "$target" != battle ] && { echo "[$i] at $s"; exit 0; }
+      if [[ "$s" == *hqIdle* ]]; then step "headquarters: sortie"; $T/press $i GotoBattle 6 >/dev/null; $T/waitfor $i "WaitDecide" 5 >/dev/null
+      else sleep 0.5; fi ;;   # waiting for the other players (co-op sortie gate)
+    battle:Play) [ "$target" = battle ] && continue
+      step "battle: back to the village"; $T/press $i Start 6 >/dev/null; sleep 0.8; $T/press $i Up >/dev/null; sleep 0.3; $T/press $i Cross 6 >/dev/null
+      $T/waitfor $i "PlayEnd|camp" 10 >/dev/null ;;
+    battle:PlayEnd|battle:Result*|battle:End*) step "results: next"; $T/press $i Cross 4 >/dev/null; sleep 0.8 ;;
+    battle:*) sleep 0.5 ;;
+    *) sleep 0.5 ;;
+  esac
+done
+echo "[$i] stuck at $(./state $i 2>/dev/null || $T/state $i)"; exit 1

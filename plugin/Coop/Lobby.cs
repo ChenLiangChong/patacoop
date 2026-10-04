@@ -196,6 +196,7 @@ public static class Lobby
         if (fromSlot != 0) return;
         GoMission = r.I32();
         Difficulty.Use(r.F32(), r.F32());
+        SharedRandom.Seed = r.I32();
         Session.Note($"the host sorties: {NameOf(GoMission)} (enemy HP x{Difficulty.EnemyHp:0.##}, damage x{Difficulty.EnemyDamage:0.##})",
             $"房主出擊：{NameOf(GoMission)}（敵人血量 x{Difficulty.EnemyHp:0.##}、傷害 x{Difficulty.EnemyDamage:0.##}）");
     }
@@ -254,7 +255,8 @@ public static class Lobby
         GoMission = mission;
         var (hp, damage) = Difficulty.ForPlayers(Session.PlayerCount);
         Difficulty.Use(hp, damage);
-        CoopNet.SendAll(new MsgWriter(Msg.Go).I32(mission).F32(hp).F32(damage).ToArray(), true);
+        SharedRandom.Seed = new System.Random().Next();
+        CoopNet.SendAll(new MsgWriter(Msg.Go).I32(mission).F32(hp).F32(damage).I32(SharedRandom.Seed).ToArray(), true);
         Session.Note("everyone is ready: sortie!", "全員準備完成：出擊！");
         return true;
     }

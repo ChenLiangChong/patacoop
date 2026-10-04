@@ -44,6 +44,11 @@ public static class JevDriver {
   }
 
   static void Command(P2.Game.Game g) {
+    // a miracle being drummed (tools/evals/miracle.cs) has the drums: the bot's orders wait
+    if (System.AppDomain.CurrentDomain.GetData("jevHold") is true) return;
+    // the auto drum stops after its count or when a battle event cancels it: keep playing the bot's order
+    var auto = g.soundDirector_?.autoKey_;
+    if (_cmd >= 0 && auto != null && !auto.isPlay_ && g.gamePhase_ == P2.Game.Game.GamePhase.GamePhase_Play) g.soundDirector_.setAutoCommand(_cmd, 99, true);
     var path = Dir + $"jev{Instance}.cmd";
     if (!System.IO.File.Exists(path)) return;
     var parts = System.IO.File.ReadAllText(path).Split(' ');

@@ -98,7 +98,7 @@ Saves are backed up before every co-op battle to `BepInEx\PataCoop\save-backups\
 | Path | What |
 |---|---|
 | `plugin/` | The mod (`PataCoop.dll`). `Plugin.cs` entry/driver; `Overlay.cs` panel; `Ui.cs` home-made IMGUI widgets; `NameLabels.cs` player labels over armies; `Net/CoopNet.cs` client; `Net/RoomFinder.cs` LAN/Radmin room search. |
-| `plugin/Coop/` | Co-op logic. `Session` roster/hello. `Lobby` camp/HQ states, sortie gate. `Battle` battle lifecycle and packet filters. `Armies` per-player squads in one troop. `HitSync` host-owned HP/deaths/gimmicks. `Clock` beat alignment. `MarchRule` "everyone marches together". `StoryCompanions` one story NPC per player. `ActorPools` battle object stock. `Difficulty`, `KeyItems`, `WorldSync` (weather), `MissionScripts`, `StoryArmy`, `SaveBackup`, `NetErrors`, `Messages` (message ids). |
+| `plugin/Coop/` | Co-op logic. `Session` roster/hello. `Lobby` camp/HQ states, sortie gate. `Battle` battle lifecycle and packet filters. `Armies` per-player squads in one troop. `HitSync` host-owned HP/deaths/gimmicks. `Clock` beat alignment. `ArmyPositions` every army walks on its own drums (positions of armies, units and the host's enemies every frame; events and enemy arrivals follow the army furthest ahead). `MarchRule` own march, last command per player. `StoryCompanions` one story NPC per player. `ActorPools` battle object stock. `Difficulty`, `KeyItems`, `WorldSync` (weather), `MissionScripts`, `StoryArmy`, `SaveBackup`, `NetErrors`, `Messages` (message ids). |
 | `server/` | LiteNetLib relay (`RelayServer.cs`, `Wire.cs`), also compiled into the plugin (the host runs it in-game) and as a standalone server. |
 | `servertest/` | Relay test suite: start `server` on a port, then `dotnet servertest.dll <port>`. |
 | `dev/` | Dev-only plugin `PataCoop.Dev`: HTTP eval server (port 9100+instance), per-instance save sandbox, auto-mute, a native disassembler/indexer (`Native.Find/Dis/Index`). Never ship it. |
@@ -123,13 +123,53 @@ Saves are backed up before every co-op battle to `BepInEx\PataCoop\save-backups\
   `boot.config`, and `steam_appid.txt` added so several copies can run. `tools/playmode` undoes
   all of it. **Always return to play mode** when done; it also restores the player's display
   settings.
-- `tools/redeploy N`: copy the fresh builds and launch N windowed, muted copies.
-- `tools/tocamp i`: drive copy i from the launcher to the camp.
+- `tools/redeploy N`: copy the fresh builds and launch N windowed, muted copies (about 25 s).
+- Small steps (prefer these over long scripts with fixed sleeps; each returns as soon as the screen
+  changes, and says where it is stuck):
+  - `tools/state i`: where copy i is in one line (`launcher`, `title:<screen>`,
+    `camp:<phase>:<facility>:m<mission>:hq<state>`, `battle:<phase>`, `down`).
+  - `tools/press i <button> [frames]`, `tools/waitfor i <regex> [seconds]`.
+  - `tools/go i camp|worldmap|hq|battle`: walks copy i there one step at a time, from any screen
+    (including out of a battle). `MISSION=<id>` picks the mission.
+  - `FULL=1 tools/coop N`: N copies into one co-op battle from wherever they are (about 35 s from
+    the camp, 90 s from launch).
+  - `tools/compare N`: every copy's battle state at the same moment, and what differs from the host:
+    army positions, enemies (missing, position, hit points), gimmick hit points.
+- `tools/tocamp i`: drive copy i from the launcher to the camp (older, fixed waits).
 - `tools/ge i <<<'C# code'`: evaluate C# inside copy i. It returns a string; `Press(VirtualPad.X, frames)` presses pad buttons.
 - `tools/gshot i`: screenshot.
 - `tools/toworldmap i` opens the world map from anywhere in the camp. `tools/pickmission i <id>` moves its cursor to a mission; it reads the map's mission list, which also lists every unlocked mission with its type.
-- `N=2 FULL=1 tools/cooptest4`: host on copy 0, the others join, everyone sorties into the same mission (`MISSION=<id>` picks it).
+- `N=2 FULL=1 tools/cooptest4`: the older launcher (relaunches, fixed waits); `coop` replaces it.
   `FULL=1` gives everyone a full army. `ARM="a.cs b.cs"` arms hooks from `tools/evals`.
+- `tools/evals/drumprobe.cs`: `DrumProbe.Play("0:A,2:A,4:A,6:D")` presses drums (A PATA,
+  S DON, W CHAKA, D PON) at half beats after the next beat, each for exactly one battle step, the
+  way a player's key arrives (fever, miracles and any command can be scripted this way).
+  `tools/drumonce` prints the timeline it records.
+- `tools/botrun <mission> [N]`: relaunch, play the mission with the Jev bot and run `compare`
+  every 10 s (`tmp/bot<mission>.txt`, `tmp/cmp<mission>.txt`). `tools/botall <missions...>` runs
+  several and prints one summary line each.
+- Test hooks run inside the game's hottest native calls. Patch only what a test needs and give
+  hooks typed parameters: `object[] __args` on a method called every step with `ref` arguments
+  (`SubGame.Miracle.Command.update`) preceded a CoreCLR crash, and a patch on an instance method
+  native code calls with a null `this` (`TroopCtrl.getSquadLineTopPosX`) throws in Il2CppInterop's
+  wrapper on every call (40 000 errors in two seconds), and an `object __result` postfix on a method
+  returning a `Nullable` of an Il2Cpp struct (`SharedRandom.Enter`) crashed the runtime at the next
+  battle's setup. Remove probes (`UnpatchSelf`) when done.
+- A slower network on one PC: in a copy, `PataCoop.Net.CoopNet.SimLatencyMs = 60;
+  SimJitterMs = 20; SimLossPercent = 2;` delays every incoming room message (order kept) and
+  drops that share of the unreliable ones. Off (0) by default; it never reaches players.
+- `AUTO=1 tools/drumonce` (in a running battle): every copy plays one PATA PATA PATA PON with
+  the game's own auto drum (`LAG=0.5` starts each next copy a beat later) and prints, per half
+  beat from the first drum, the hits, when the command was fixed and executed, and how far the
+  army and its units moved. Measure march timing and distance at normal speed: `SPEED` distorts
+  them. `VirtualPad` presses are frame-based (fine for menus); script drums with `DrumProbe.Play`.
+  The auto drum (`Director.setAutoCommand`) cannot play miracles.
+- `tools/evals/cycle.cs`: plays drum commands in blocks with the auto drum (`Vars["cycle"] =
+  "3x3,2x3"`: attack three times, defend three times, again), e.g. to build fever.
+- `tools/evals/miracle.cs` (with `cycle.cs` running): at the first command in fever it stops the
+  auto drum and the Jev bot's drums, drums DON - DONDON - DONDON, plays the rhythm game as its
+  script asks and logs every half beat (mode, beat timer, judgments, score).
+  `tools/evals/coopclock.cs`: one line of a copy's battle clock, catch-up steps and weather.
 - `N=2 FULL=1 SPEED=2 tools/jevcoop`: the same, plus an automatic drummer
   (`tools/jevbot.py` + `tools/evals/jevdriver.cs`). It needs a TypeSafe Jev API key in
   `~/.config/typesafe/jev.key`; never commit it. Without a key, use `tools/coopbot2`.
@@ -156,6 +196,30 @@ Saves are backed up before every co-op battle to `BepInEx\PataCoop\save-backups\
 - **Fixed timestep:** the game advances one fixed step (`Game.update(80)`) per frame, so any
   hitch is a permanent beat lag. `Clock` runs extra steps to catch up. Never skip `Game.update`;
   the scene then drops the mission.
+- **Battle clock:** the beat timer (`BeatTimer.tick_`, 80 ticks a step) is not a battle clock. A
+  miracle's rhythm game restarts it from 0, and so does the return to the battle music (the step
+  after that restart does not even advance it), on the drummer's machine only. Comparing raw ticks
+  made the drummer "behind" by the whole battle, so `Clock` fast-forwarded the rhythm game and
+  the rest of the battle. `BattleClock` (the beat timer at the battle's first step plus 80 ticks a
+  battle step) is what `Clock`, `SharedRandom` and `MarchRule` use.
+- **Own armies:** the engine has one player troop (one base position, one flag bearer). Each
+  machine's base is its own player's army: `OwnMarchPatch` gives `moveSquadLine` the local player's
+  instructions, and PD_TroopBasePos (which overwrites the base) is dropped everywhere. The engine
+  walks the troop only while the LOCAL `BeatCommander` is in `State_Kaesi` (or player 0's command
+  is Miss, or `UnitMng.info_.isKaeshiOnlyOff`). Other players' squads: while `UnitSquad.update` runs
+  for one of them, the base and the flag bearer's model stand at that player's army (squads measure
+  places and ranges from both), and afterwards its units are put where their owner reported them
+  (`Msg.ArmyPos`, every frame). Unit layout ids match on every machine.
+- **Position-driven world events:** mission scripts poll `CommandGame.getFlagUnitPosX` and
+  `getTroopTopPos`; enemy squads come on in `UnitTroop.squadAddingCheck` as the player troop's base
+  passes them. Both are shown the army furthest ahead, so every machine spawns the same squads in
+  the same order. Enemy squad `uniqueId`s must match: `HitSync` matches units by unit and squad id.
+  A guest's own clear (its army at the goal) is sent to the host (`Msg.Goal`), which clears for all.
+- **No fixed rhythm:** the engine's multiplayer path sets `BeatCommander.isFixedRhythm_`. With it,
+  the army answers only on every other bar line: a command whose last drum lands anywhere else
+  waits one to three beats, the player's next command cuts that answer short, and every player
+  who does not drum gets a Miss each cycle. Co-op keeps it off (`Battle.Commit`), so the army
+  answers right after each player's own last drum, as in single-player.
 - **Borrowed multiplayer engine:** co-op battles run with `isMultiMode`, set in the
   `Game.initialize` postfix. The engine assumes player-troop squad uids 0–3 are players 1–4 (one
   hero squad each), so:
@@ -169,8 +233,45 @@ Saves are backed up before every co-op battle to `BepInEx\PataCoop\save-backups\
 - **Event scripts:** `Script.execute` runs Init/EBox/Gimmick events. Only `EventType_Gimmick` means
   a gimmick broke.
 - **Randomness:** `Macros.INTRAND`/`REALRAND` are stubs returning 0, so field drops are
-  deterministic. `UnityEngine.Random` (result chests etc.) is per player.
-- **Weather:** the host broadcasts the weather. Whether guests' miracles work is still untested.
+  deterministic. Which squads a mission brings on (a hunting ground's herds) is rolled with
+  `UnityEngine.Random` in the mission scripts' `cmd_rand`, `UnitSquad.addUnitSet` and
+  `CommandGame.variousProcForAllUnit`: `SharedRandom` seeds each of those rolls from the host's
+  battle seed (sent with the sortie), the roll's script or squad, the battle step (`BattleClock`)
+  and its count in that step, so every machine rolls the same. Scripts roll every step, so one
+  shared stream is not enough. Everything else (result chests, damage spread, weather, particles)
+  keeps its own randomness.
+- **Unit identity:** a unit's `info_.uniqueId` is a slot in the battle stock taken in creation
+  order and differs between machines for enemies. `UnitIds` names a unit by troop, squad
+  `uniqueId` (the mission's own squad ids, or ours) and its place in the squad (sticky when units
+  before it fall), as the game's own multiplayer did (squad id and line index). Hit points and
+  enemy positions are matched by it.
+- **Miracles:** in fever, DON - DONDON - DONDON (half beats 0 2 3 5 6 of a drum bar) enters
+  `Mode_Miracl`, a rhythm sub-game (`SubGame.Miracle`) on its own beat timer from 0: 160 half
+  beats in rounds of 16 (`cursor.commandGrup.commandList[hb / 16]`, one command per half beat). In
+  each round the first 8 half beats are the call and the last 8 (`act2 == 1`) list the drums to
+  answer in `hit[0]` (bit 1 PON, 2 DON, 4 PATA, 8 CHAKA; the high bits are display). The Rain
+  rounds answer 3, 3, 4, 4, 4, 4, 5 and 7 PONs (one hit in the last round is `19`, which neither
+  PON nor DON alone satisfies; 7 perfect rounds of 8 still work). The game reads the drums with `Pad.stand` and judges
+  each in `Script.Analyzer.hitCheck` (OK / NG). Then `P2.Game.Miracle.Controller.activate(score)`
+  starts the mission's miracle (`Rain`, `Storm`, `Wind`... change the weather over time with
+  `ParamId_Miracle`). A guest's activation is sent to the host, which activates it too; guests
+  take the host's weather (`WorldSync`). Tested: a guest's Rain in mission 80 rains on both.
+- **Battle input:** drums arrive through two paths: the pad bits read with
+  `P2.System.Pad.Pad.stand` (0x8000 PATA, 0x2000 PON, 0x4000 DON, 0x1000 CHAKA) and
+  `MultiPlatformInputManager.isActionThisFrame<InGameControls>`, whose native code is shared with
+  the MenuControls instantiation. A real key reaches one of them; a scripted press must too, and a
+  key held for more than one battle step counts as several hits (the second one a miss). Machines
+  catching up run two steps in a frame, so frame-based presses land late or twice: press for
+  exactly one step, on the step that reaches the half-beat line (`drumprobe.cs` does).
+- **Weather:** the host broadcasts the weather.
+- **Camera:** `TrackingCamera.update` runs by `mode_`. In mode 0 (tracking), co-op (`isMultiMode`)
+  takes `updateMultiTracking`: the camera stands at the troop's rearmost unit
+  (`UnitTroop.getUnitPosX(true, false, true)[0]`) plus the view offset, clamped to 250 from our own
+  flag bearer, so our army stays in view. In mode 1 the camera stands where `setX` put it:
+  `WatchGameMarch.mainNormal` puts it at our flag bearer, and boss missions' scripts
+  (`CommandGame.setCameraX`) put it from the flag bearer they read, which is the leading army's
+  (`ScriptsSeeTheLeadPatch`). `ScriptCameraPatch` moves such a place back by the same lead, so each
+  player's camera follows their own army there too.
 - **Out of scope:** hero-world egg/carnival missions are not supported yet.
 
 ### Rules for changes

@@ -1,0 +1,41 @@
+#!/bin/bash
+# drumonce [offset] [drummer] : in a running battle, one PATA PATA PATA PON through the game's pad (as a player's keys),
+# starting OFFSET beats after a bar where drums may start (default 0), on copy DRUMMER (default 0); every copy records.
+# AUTO=1: every copy plays it with the game's own auto drum instead, at the same moment (both players drum);
+# LAG=<seconds>: each next copy starts that much later (at 120 BPM, 0.5 s is one beat). WHO="1": only these copies drum
+# (beat 0 is then the first of them to drum: pass it as DRUMMER).
+# Prints, per half beat from the first PATA: the drum state, hits and command events, and how far the army moved.
+offset=${1:-0}; drummer=${2:-0}; . "$(dirname "$0")/env.sh"
+N=${N:-2}; LAST=$((N-1))
+call() { $T/ge $1 <<<"var t = Vars.TryGetValue(\"DrumProbe\", out var o) ? (System.Type)o : null; if (t == null) return \"no probe\"; $2" | head -1; }
+for i in $(seq 0 $LAST); do [ "$(call $i 'return "ok";')" = ok ] || $T/ge $i < $S/drumprobe.cs | head -1; done
+for i in $(seq 0 $LAST); do o=-1; [ $i = $drummer ] && [ -z "$AUTO" ] && o=$offset; call $i "t.GetMethod(\"Arm\").Invoke(null, new object[] { $o }); return \"armed\";" >/dev/null; done
+if [ -n "$AUTO" ]; then for i in ${WHO:-$(seq 0 $LAST)}; do $T/ge $i <<<'P2.Game.Game.pGame_g.soundDirector_.setAutoCommand(1, 2, true); return "auto";' >/dev/null & [ -n "$LAG" ] && sleep $LAG; done; wait; fi
+sleep ${SECS:-20}
+for i in $(seq 0 $LAST); do call $i 'return t.GetMethod("Dump").Invoke(null, null);'; done
+for i in $(seq 0 $LAST); do python3 - "$W/tmp/drum$i.txt" "copy $i" "$W/tmp/drum$drummer.txt" <<'PY'
+import sys, re
+def load(p):
+    rows = []
+    for l in open(p, encoding='utf-8', errors='replace'):
+        f = l.rstrip('\r\n').split(' ', 9)
+        if len(f) < 9: continue
+        arm = [float(v) if v != '-' else 0.0 for v in f[7].split(',')]
+        rows.append(dict(frame=int(f[0]), hb=int(f[1]), base=float(f[4]), mid=float(f[5]), cmd=f[6], a0=arm[0], a1=arm[1], ev=(f[9] if len(f) > 9 else '').strip()))
+    return rows
+rows = load(sys.argv[1]); drum = load(sys.argv[3])
+first = next((r['hb'] for r in drum if 'hit:' in r['ev']), None)
+if first is None: print(sys.argv[2], 'no drum hit recorded'); sys.exit()
+byhb = {}
+for r in rows:
+    d = byhb.setdefault(r['hb'], dict(b0=r['base'], m0=r['mid'], p0=r['a0'], q0=r['a1'], ev=[], cmd=r['cmd']))
+    d['b1'], d['m1'], d['p1'], d['q1'], d['cmd'] = r['base'], r['mid'], r['a0'], r['a1'], r['cmd']
+    if r['ev']: d['ev'] += [e for e in r['ev'].split(';') if e and not e.startswith('press')]
+print(f"{sys.argv[2]} (beat 0 = first PATA, half beat {first}); per half beat: base moved / P1 army moved / P2 army moved / commands p0,p1 / events")
+for hb in range(first - 2, first + 22):
+    d = byhb.get(hb)
+    if not d: continue
+    ev = ' '.join(e.replace('Percussion_', '') for e in d['ev'])
+    print(f"  beat {(hb - first) / 2:5.1f}  base {d['b1'] - d['b0']:5.1f}  P1 {d['p1'] - d['p0']:5.1f}  P2 {d['q1'] - d['q0']:5.1f}  cmd {d['cmd']:6} {ev}")
+PY
+done

@@ -26,7 +26,7 @@ internal static class HitSync
     private struct Hp { public Kind Kind; public int Troop, Squad, Id, Value; }
     private struct Fx { public byte Type; public uint Number; public Vector4 Pos; }
 
-    private static readonly Dictionary<(Kind, int), Hp> PendingHp = new();
+    private static readonly Dictionary<(Kind, int, int, int), Hp> PendingHp = new();
     private static readonly List<Fx> PendingFx = new();
     private static readonly List<(int id, float wait, float fade, bool force, bool broke)> PendingKills = new();
     private static readonly Dictionary<IntPtr, int> GimmickByStatus = new();
@@ -63,7 +63,7 @@ internal static class HitSync
     internal static void HostHpChanged(GameStatus status)
     {
         if (!HostBattle) return;
-        if (Identify(status) is { } hp) PendingHp[(hp.Kind, hp.Kind == Kind.Unit ? hp.Id : hp.Kind == Kind.Gimmick ? hp.Id : -1)] = hp;
+        if (Identify(status) is { } hp) PendingHp[(hp.Kind, hp.Troop, hp.Squad, hp.Kind == Kind.Flag ? -1 : hp.Id)] = hp;
     }
 
     internal static void HostHitEffect(HitEffectType type, uint number, Vector4 pos)
@@ -114,7 +114,7 @@ internal static class HitSync
                     return new Hp
                     {
                         Kind = Kind.Unit, Troop = (int)(squad?.pUnitTroop_?.troopInfo_?.troopType ?? 0), Squad = squad?.squadInfo_?.uniqueId ?? -1,
-                        Id = unit.info_?.uniqueId ?? -1, Value = value,
+                        Id = UnitIds.PlaceOf(unit), Value = value,
                     };
                 }
                 if (actor.TryCast<FlagUnit>() != null) return new Hp { Kind = Kind.Flag, Value = value };
@@ -189,7 +189,7 @@ internal static class HitSync
                     if (squad?.unitBasePtrList_ == null) continue;
                     foreach (var u in squad.unitBasePtrList_)
                         if (u?.pActorStatus_ != null && u.info_ != null)
-                            list.Add(new Hp { Kind = Kind.Unit, Troop = (int)troop.troopInfo_.troopType, Squad = squad.squadInfo_?.uniqueId ?? -1, Id = u.info_.uniqueId, Value = u.pActorStatus_.getHitPoint() });
+                            list.Add(new Hp { Kind = Kind.Unit, Troop = (int)troop.troopInfo_.troopType, Squad = squad.squadInfo_?.uniqueId ?? -1, Id = UnitIds.PlaceOf(u), Value = u.pActorStatus_.getHitPoint() });
                 }
                 if (t == 0 && troop.troopCtrl_?.flagUnit_?.pActorStatus_ is { } flag) list.Add(new Hp { Kind = Kind.Flag, Value = flag.getHitPoint() });
             }
@@ -308,7 +308,7 @@ internal static class HitSync
         int n = r.U16();
         if (n == 0) return;
         var game = P2.Game.Game.pGame_g;
-        Dictionary<int, UnitBase>? units = null;
+        Dictionary<(int Troop, int Squad, int Place), UnitBase>? units = null;
         for (int i = 0; i < n; i++)
         {
             var hp = new Hp { Kind = (Kind)r.U8(), Troop = r.U8(), Squad = r.I32(), Id = r.I32(), Value = r.I32() };
@@ -316,11 +316,8 @@ internal static class HitSync
             switch (hp.Kind)
             {
                 case Kind.Unit:
-                    units ??= UnitsById(game);
-                    if (units.TryGetValue(hp.Id, out var unit)
-                        && (int)(unit.pUnitSquad_?.pUnitTroop_?.troopInfo_?.troopType ?? (TroopType)(-1)) == hp.Troop
-                        && unit.pUnitSquad_?.squadInfo_?.uniqueId == hp.Squad)
-                        status = unit.pActorStatus_;
+                    units ??= UnitIds.All(game);
+                    if (units.TryGetValue((hp.Troop, hp.Squad, hp.Id), out var unit)) status = unit.pActorStatus_;
                     break;
                 case Kind.Flag:
                     status = game?.getUnitMng()?.unitTroopPtrArray_?[0]?.troopCtrl_?.flagUnit_?.pActorStatus_;
@@ -339,23 +336,6 @@ internal static class HitSync
         }
     }
 
-    private static Dictionary<int, UnitBase> UnitsById(P2.Game.Game? game)
-    {
-        var map = new Dictionary<int, UnitBase>();
-        var troops = game?.getUnitMng()?.unitTroopPtrArray_;
-        if (troops == null) return map;
-        foreach (var troop in troops)
-        {
-            if (troop?.unitSquadPtrList_ == null) continue;
-            foreach (var squad in troop.unitSquadPtrList_)
-            {
-                if (squad?.unitBasePtrList_ == null) continue;
-                foreach (var u in squad.unitBasePtrList_)
-                    if (u?.info_ != null) map[u.info_.uniqueId] = u;
-            }
-        }
-        return map;
-    }
 }
 
 /// <summary>

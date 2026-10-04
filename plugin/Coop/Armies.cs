@@ -174,7 +174,7 @@ internal static class Armies
             var dst = layout.squadAddingParam[k];
             Formation.WriteSquad(squad, dst, uid);
             dst.rsv1 = OwnerTag | owner;
-            dst.posX = k * 20f; // one line, front to back in slot order
+            // each army keeps its own single-player places: it stands around its own position (ArmyPositions)
             bool ours = owner == CoopNet.MySlot && own.Squads.Contains(squad);
             for (int j = 0; j < squad.Units.Count; j++)
             {

@@ -180,13 +180,6 @@ internal static class Overlay
             sb.Append(Text.T($"\nbattle: {Battle.State} · enemy HP x{Difficulty.EnemyHp:0.##} dmg x{Difficulty.EnemyDamage:0.##}",
                 $"\n戰鬥：{Battle.State} · 敵人血量 x{Difficulty.EnemyHp:0.##} 傷害 x{Difficulty.EnemyDamage:0.##}"));
             sb.Append('\n').Append(Clock.Describe()).Append(" · ").Append(HitSync.Describe());
-            var troops = P2.Game.Game.pGame_g?.getUnitMng()?.unitTroopPtrArray_;
-            if (troops != null && troops.Count > 0 && troops[0] != null)
-            {
-                var blockers = MarchRule.Blockers(troops[0], MarchRule.Now());
-                if (blockers.Count > 0)
-                    sb.Append(Text.T("\nmarch held up by: ", "\n前進被擋：")).Append(string.Join("、", blockers.Select(p => $"{Session.Name(p)}（{MarchRule.Word(troops[0], p)}）")));
-            }
         }
         else if (!CoopNet.IsHost && Lobby.HostMission >= 0) sb.Append(Text.T($"\nhost is preparing {Lobby.NameOf(Lobby.HostMission)}", $"\n房主正在整備：{Lobby.NameOf(Lobby.HostMission)}"));
         if (Session.LastEvent.Length > 0) sb.Append('\n').Append(Session.LastEvent.TrimEnd('\n'));

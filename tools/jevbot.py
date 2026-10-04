@@ -94,7 +94,8 @@ KINDS = [
     (('DOOR', 'GATE'), 'gate', 'obstacle'),
     (('WALL', 'FENCE', 'BARRICADE'), 'wall', 'obstacle'),
     (('FLAG',), 'enemy flag', 'obstacle'),
-    (('BOX', 'CHEST', 'PRIZE'), 'treasure chest', 'loot'),
+    # chests stand in the way until broken open
+    (('BOX', 'CHEST', 'PRIZE'), 'treasure chest (break it open)', 'obstacle'),
     (('GRASS', 'BUSH', 'FLOWER', 'TREE', 'PLANT'), 'plant', 'scenery'),
     # signboards along hunting grounds have hit points but block nothing: marching walks past them
     (('BILLBOARD', 'SIGN', 'KANBAN'), 'signboard', 'scenery'),

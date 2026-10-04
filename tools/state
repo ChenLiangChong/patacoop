@@ -1,0 +1,23 @@
+#!/bin/bash
+# state <instance> : where copy <instance> is, in one short line:
+#   down | launcher | logo | title:<screen>:<cursor>[:load] | camp:<phase>[:<facility>#<id>] | battle:<phase> | <scene>
+i=${1:-0}; . "$(dirname "$0")/env.sh"
+r=$(GE_TIMEOUT=${GE_TIMEOUT:-4} $T/ge $i <<'EOF' 2>/dev/null | head -1
+if (UnityEngine.Object.FindObjectOfType<LauncherMain>() != null) return "launcher";
+var sc = Labo2Application.getApplication()?.lgsm_g?.scene_;
+var g = P2.Game.Game.pGame_g;
+// the battle object outlives the battle (its phase stays at the end): the camp or title screen wins
+bool elsewhere = sc?.TryCast<P2.Title.Scene>() != null || sc?.scene_?.TryCast<P2.Bases.Camp.Scene>() != null;
+if (!elsewhere && g != null && g.gamePhase_ != P2.Game.Game.GamePhase.GamePhase_None) return $"battle:{g.gamePhase_.ToString().Replace("GamePhase_", "")}";
+var title = sc?.TryCast<P2.Title.Scene>();
+if (title != null) { var d = title.display_; var sl = d?.saveLoadMenuManager_; return $"title:{d?.state_.ToString().Replace("State_", "")}:{d?.selectIndex_}{(sl != null && sl.isActive_ ? ":load" : "")}"; }
+var camp = sc?.scene_?.TryCast<P2.Bases.Camp.Scene>();
+if (camp != null) {
+  var c = camp.controller_; var f = c?.partsSelector_?.selectParts_?.TryCast<P2.Bases.Camp.Facility.Facility>()?.param_; var wm = c?.worldMap_;
+  return $"camp:{c?.getPhase().ToString().Replace("Phase_", "")}{(f != null ? ":" + f.name + "#" + f.id : "")}{(wm != null ? ":m" + wm.getSelect() : "")}{(c?.headQuartersScenePtr_?.headQuartersManager_?.mainObserver_ is { } hq ? ":hq" + hq.state_.ToString().Replace("State_", "") + ":" + hq.squadOrgObserver_?.paragetoSquadModel_?.state_.ToString().Replace("State_", "") : "")}";
+}
+var name = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+return name == "LogoScene" ? "logo" : name;
+EOF
+)
+case "$r" in ""|*"curl"*|*"Failed"*|*"refused"*) echo down;; *) echo "$r";; esac

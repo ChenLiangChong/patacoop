@@ -56,8 +56,8 @@ public sealed class Room
 
 public sealed class RelayServer : INetEventListener
 {
-    // 8: PataCoop 0.4.1 (single-player march for our troop, enemy packets to guests)
-    public const byte ProtocolVersion = 8;
+    // 9: PataCoop 0.4.2 (every army walks on its own drums; army positions shared each frame)
+    public const byte ProtocolVersion = 9;
     /// <summary>
     /// A room search must be at least this long and is answered with no more bytes than it had, so
     /// nobody can use a server to flood a third party with answers bigger than what they sent.

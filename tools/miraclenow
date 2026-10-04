@@ -1,0 +1,23 @@
+#!/bin/bash
+# miraclenow <copy> : in a running battle, that copy builds fever with defend commands (evals/cycle.cs), then drums
+# the mission's miracle and plays its rhythm game as the script asks (evals/miracle.cs); the Jev bot's drums on that
+# copy wait meanwhile. Prints the judgments, the score and the weather before and after on every copy (N, default 2).
+i=${1:-1}; . "$(dirname "$0")/env.sh"; N=${N:-2}
+W2='var w = P2.Game.Game.pGame_g?.map_?.weatherController_?.currentParam_; return $"[{Instance}] weather {w?.currentWeather} rain {w?.rainyLevel} wind {w?.windLevel} fog {w?.fogLevel}";'
+for c in $(seq 0 $((N-1))); do echo "before $($T/ge $c <<<"$W2" | head -1)"; done
+# the drums are pressed on beat lines the beat timer keeps per frame: no fast-forwarding meanwhile, on any copy
+# (a copy left fast would make the others catch up with two steps a frame)
+SP='int old = 1; foreach (var a in System.AppDomain.CurrentDomain.GetAssemblies()) { System.Type[] ts; try { ts = a.GetTypes(); } catch { continue; } foreach (var t in ts) if (t.Name == "JevDriver") { old = System.Math.Max(old, (int)t.GetField("Speed").GetValue(null)); t.GetField("Speed").SetValue(null, SPEED); } } return old.ToString();'
+speed=1; for c in $(seq 0 $((N-1))); do s=$($T/ge $c <<<"${SP//SPEED/1}" | head -1); [[ "$s" =~ ^[0-9]+$ ]] && [ "$s" -gt "$speed" ] && speed=$s; done
+Q='var l = (System.Collections.Generic.List<string>)Vars["miracleTestLog"]; bool m = false, back = false, trig = false; foreach (var x in l) { if (x.Contains("miracle drums")) trig = true; if (x.Contains(" Miracl ")) m = true; else if (m && x.Contains(" Battle ")) back = true; } bool held = System.AppDomain.CurrentDomain.GetData("jevHold") is true; return $"{(back ? "over" : m ? "in the miracle" : trig && !held ? "failed" : trig ? "drumming the miracle" : "building fever")}";'
+for try in 1 2 3; do
+  $T/ge $i <<<'Vars["cycle"] = "2x99"; Vars.Remove("miraclePlan"); return "";' >/dev/null
+  $T/ge $i < $S/cycle.cs | head -1; $T/ge $i < $S/miracle.cs | head -1
+  for k in $(seq 1 100); do r=$($T/ge $i <<<"$Q" | head -1); [ "$r" = over ] || [ "$r" = failed ] && break; sleep 3; done
+  [ "$r" = over ] && break
+  echo "attempt $try: $r"
+done
+echo "miracle on copy $i: $r"
+for c in $(seq 0 $((N-1))); do $T/ge $c <<<"${SP//SPEED/$speed}" >/dev/null; done
+$T/ge $i <<<'var l = (System.Collections.Generic.List<string>)Vars["miracleTestLog"]; var ok = l.Sum(x => System.Text.RegularExpressions.Regex.Matches(x, "acheck:[1-9]=HitResult_OK").Count); var ng = l.Sum(x => System.Text.RegularExpressions.Regex.Matches(x, "acheck:[0-9]=HitResult_NG").Count); var score = l.LastOrDefault(x => x.Contains("score[")); return $"judged OK {ok}, NG {ng}; {(score == null ? "no score" : score.Substring(score.IndexOf("score[")))}";' | head -1
+sleep 3; for c in $(seq 0 $((N-1))); do echo "after $($T/ge $c <<<"$W2" | head -1)"; done

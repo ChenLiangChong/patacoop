@@ -1,4 +1,4 @@
-param([int]$Count = 2, [string]$Exe = 'E:\SteamLibrary\steamapps\common\PATAPON12_REPLAY\PATAPON12_REPLAY.exe')
+﻿param([int]$Count = 2, [string]$Exe = 'E:\SteamLibrary\steamapps\common\PATAPON12_REPLAY\PATAPON12_REPLAY.exe')
 Add-Type @"
 using System; using System.Runtime.InteropServices;
 public static class W { [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags); }
@@ -6,7 +6,8 @@ public static class W { [DllImport("user32.dll")] public static extern bool SetW
 # unmute before closing: Windows keeps a program's mute setting from one run to the next
 & (Join-Path $PSScriptRoot 'mute.ps1') -Mute 0 | Out-Null
 Get-Process PATAPON12_REPLAY -EA SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null }
-Start-Sleep -Seconds 5
+$deadline = (Get-Date).AddSeconds(5)
+while ((Get-Process PATAPON12_REPLAY -EA SilentlyContinue) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }
 Get-Process PATAPON12_REPLAY -EA SilentlyContinue | Stop-Process -Force
 # the co-op relay now runs inside the hosting game (F7); the standalone server would hold its port
 Get-Process PataCoop.Server -EA SilentlyContinue | Stop-Process -Force
@@ -18,11 +19,16 @@ for ($i = 0; $i -lt $Count; $i++) {
   # (two copies reading and writing the same .cfg at once makes BepInEx skip the plugin)
   $deadline = (Get-Date).AddSeconds(90)
   while ((Get-Date) -lt $deadline) {
-    try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 "http://127.0.0.1:$(9100 + $i)/ping" | Out-Null; break } catch { Start-Sleep -Seconds 2 }
+    try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 "http://127.0.0.1:$(9100 + $i)/ping" | Out-Null; break } catch { Start-Sleep -Milliseconds 500 }
   }
-  Start-Sleep -Seconds 3
+  Start-Sleep -Seconds 1
 }
-Start-Sleep -Seconds 20
+# wait for the windows to exist (no fixed sleep)
+$deadline = (Get-Date).AddSeconds(30)
+while ((Get-Date) -lt $deadline) {
+  if (-not ($procs | Where-Object { (Get-Process -Id $_.Id -EA SilentlyContinue).MainWindowHandle -eq 0 })) { break }
+  Start-Sleep -Milliseconds 500
+}
 # stack the dev windows on the right-hand monitor (x = 1920..3840)
 for ($i = 0; $i -lt $procs.Count; $i++) {
   $p = Get-Process -Id $procs[$i].Id -EA SilentlyContinue

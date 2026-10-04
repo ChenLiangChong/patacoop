@@ -1,0 +1,20 @@
+#!/bin/bash
+# coop [N] : N copies (default 2), from wherever they are, into one co-op battle: everyone to the camp, host on copy 0,
+# the others join, everyone sorties (MISSION=<id>, default the highlighted one). FULL=1 gives everyone a full army,
+# ARM="a.cs b.cs" arms hooks from tools/evals first. Every step is printed with its time; it stops where it gets stuck.
+N=${1:-2}; LAST=$((N-1)); NAMES=(Alice Bob Carol Dave); T=$(cd "$(dirname "$0")" && pwd); . "$T/env.sh"
+t0=$(date +%s); el() { echo "+$(( $(date +%s) - t0 ))s"; }
+for i in $(seq 0 $LAST); do $T/go $i camp & done; wait
+for i in $(seq 0 $LAST); do $T/state $i | grep -q "^camp:Map" || { echo "copy $i is not in the camp: $($T/state $i)"; exit 1; }; done
+echo "$(el) all in the camp"
+for i in $(seq 0 $LAST); do r=$($T/ge $i <<<'return "plugin " + PataCoop.CoopPlugin.Version;' | head -1); [[ "$r" == plugin* ]] || { echo "[$i] co-op plugin not loaded: $r"; exit 1; }; done
+[ -n "$FULL" ] && for i in $(seq 0 $LAST); do $T/ge $i < $S/fullarmy.cs | head -1; done
+for f in $ARM; do for i in $(seq 0 $LAST); do $T/ge $i < $S/$f | head -1; done; done
+$T/ge 0 <<<"PataCoop.CoopPlugin.PlayerName.Value = \"${NAMES[0]}\"; return PataCoop.Actions.Host();" | head -1
+for i in $(seq 1 $LAST); do $T/ge $i <<<"PataCoop.CoopPlugin.PlayerName.Value = \"${NAMES[$i]}\"; return PataCoop.Actions.Join(\"127.0.0.1\");" | head -1; done
+# everyone in the room before anyone sorties
+for n in $(seq 1 40); do c=$($T/ge 0 <<<'return PataCoop.Coop.Session.PlayerCount.ToString();' | head -1); [ "$c" = "$N" ] && break; sleep 0.5; done
+echo "$(el) room has $c players"
+for i in $(seq 0 $LAST); do $T/go $i battle & done; wait
+echo "$(el) done"
+for i in $(seq 0 $LAST); do $T/ge $i <<<'return $"[{Instance}] {P2.Game.Game.pGame_g?.gamePhase_} co-op={PataCoop.Coop.Battle.Active} {PataCoop.Coop.Battle.State} | {PataCoop.Coop.Session.LastEvent}";' | head -1; done

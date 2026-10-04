@@ -8,9 +8,9 @@ namespace PataCoop;
 /// <summary>
 /// Player names over the battlefield. Units of the same class stand on the same spot when they
 /// attack, so two players' armies can overlap exactly; a coloured label per player ("Bob x3")
-/// over their squads shows who is where, with the command they drummed last. Whoever holds the
-/// march up (drumming something else while others march) blinks with "holding up". Overlapping
-/// labels are stacked upwards.
+/// over their squads shows who is where, with the command they drummed last. Overlapping labels
+/// are stacked upwards. Every army walks on its own, so another army can be off screen: its label
+/// then sits at that edge, high up, with an arrow and how many marches away it is.
 /// </summary>
 internal static class NameLabels
 {
@@ -19,7 +19,10 @@ internal static class NameLabels
         new(1f, 0.42f, 0.42f), new(0.30f, 0.67f, 0.97f), new(0.41f, 0.86f, 0.49f), new(1f, 0.83f, 0.23f),
     };
 
-    private struct Label { public int Owner; public float X, Y; public int Units; public string Text; public bool Blocking; }
+    private struct Label { public int Owner; public float X, Y; public int Units; public string Text; public int Side; }
+
+    /// <summary>About how far one march takes an army (for "about 3 marches ahead").</summary>
+    private const float MarchLength = 100f;
 
     private static readonly List<Label> Labels = new();
     private static int _builtFrame = -1;
@@ -36,15 +39,16 @@ internal static class NameLabels
         }
         float scale = Screen.height / 540f;
         float w = 260 * scale, h = 20 * scale;
-        bool blink = (int)(Time.unscaledTime * 3) % 2 == 0;
         var placed = new List<Rect>();
         var old = GUI.contentColor;
         foreach (var l in Labels)
         {
-            var r = new Rect(Mathf.Clamp(l.X - w / 2, 0, Screen.width - w), l.Y - h, w, h);
+            var r = l.Side == 0
+                ? new Rect(Mathf.Clamp(l.X - w / 2, 0, Screen.width - w), l.Y - h, w, h)
+                : new Rect(l.Side < 0 ? 4 * scale : Screen.width - w - 4 * scale, 160 * scale, w, h); // below the squad gauges and the panel
             for (int guard = 0; guard < 4 && placed.Exists(p => p.Overlaps(r)); guard++) r.y -= h;
             placed.Add(r);
-            Ui.Outlined(r, l.Text, l.Blocking && blink ? Color.white : ColorOf(l.Owner), 11 * scale);
+            Ui.Outlined(r, l.Text, ColorOf(l.Owner), 11 * scale);
         }
         GUI.contentColor = old;
     }
@@ -59,6 +63,7 @@ internal static class NameLabels
         float head = 70 * (Screen.height / 540f);
         var sumX = new float[Session.MaxPlayers];
         var minY = new float[Session.MaxPlayers];
+        var worldX = new float[Session.MaxPlayers];
         var count = new int[Session.MaxPlayers];
         foreach (var squad in troop.unitSquadPtrList_)
         {
@@ -75,20 +80,31 @@ internal static class NameLabels
                 var s = P2.System.Gfx.Camera.CameraController.worldToScreenPos(new Vector3(x, y, 0));
                 float gy = Screen.height - s.y - head;
                 sumX[owner] += s.x;
+                worldX[owner] += x;
                 minY[owner] = count[owner] == 0 ? gy : Math.Min(minY[owner], gy);
                 count[owner]++;
             }
         }
         int now = MarchRule.Now();
-        var blockers = MarchRule.Blockers(troop, now);
+        var basePos = troop.troopBasePos_;
+        float ourBase = basePos != null && basePos.Length > 0 ? basePos[0] : 0;
         for (int p = 0; p < Session.MaxPlayers; p++)
         {
             if (count[p] == 0) continue;
-            var stance = MarchRule.StanceOf(troop, p, now);
-            string doing = stance == MarchRule.Stance.Idle ? Text.T("idle", "閒置") : MarchRule.Word(troop, p);
-            bool blocking = blockers.Contains(p);
-            string text = $"▼ {Armies.ArmyName(p)} x{count[p]}" + (doing.Length > 0 ? $" · {doing}" : "") + (blocking ? Text.T(" (holding up)", "（擋路）") : "");
-            Labels.Add(new Label { Owner = p, X = sumX[p] / count[p], Y = minY[p], Units = count[p], Text = text, Blocking = blocking });
+            string doing = MarchRule.Idle(p, now) ? Text.T("idle", "閒置") : MarchRule.Word(troop, p);
+            string name = $"{Armies.ArmyName(p)} x{count[p]}" + (doing.Length > 0 ? $" · {doing}" : "");
+            float screenX = sumX[p] / count[p];
+            int side = screenX < 0 ? -1 : screenX > Screen.width ? 1 : 0;
+            string text;
+            if (side == 0) text = "▼ " + name;
+            else
+            {
+                int marches = Math.Max(1, (int)Math.Round(Math.Abs(worldX[p] / count[p] - ourBase) / MarchLength));
+                text = side < 0
+                    ? "◀ " + name + Text.T($" (about {marches} marches behind)", $"（後方約 {marches} 次前進）")
+                    : name + Text.T($" (about {marches} marches ahead)", $"（前方約 {marches} 次前進）") + " ▶";
+            }
+            Labels.Add(new Label { Owner = p, X = screenX, Y = minY[p], Units = count[p], Text = text, Side = side });
         }
         Labels.Sort((a, b) => a.Owner.CompareTo(b.Owner));
     }

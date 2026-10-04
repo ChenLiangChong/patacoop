@@ -1,0 +1,5 @@
+// One line: our camera, our flag bearer and troop base, and every player's army (mean x of its units) on this copy.
+var g = P2.Game.Game.pGame_g; var tr = g.getUnitMng().unitTroopPtrArray_[0]; var sum = new float[4]; var cnt = new int[4];
+foreach (var sq in tr.unitSquadPtrList_) { int tag = (int)(sq?.squadInfo_?.squadAddingParam?.rsv1 ?? 0); if ((tag & ~0xF) != 0x50430000) continue; int p = tag & 0xF; foreach (var u in sq.unitBasePtrList_) { if (u == null || u.isEnd()) continue; var m = u.pActorModel_?.TryCast<P2.Game.Unit.UnitModel>(); if (m == null) continue; sum[p] += m.pos_.x; cnt[p]++; } }
+var cd = g.gameCameraPtr_?.cameraData_; var w = g.map_?.weatherController_?.currentParam_;
+return $"[{Instance}] me P{PataCoop.Net.CoopNet.MySlot + 1} camera {(cd == null ? -1 : (int)cd.mat.m30)} flag {(int)tr.troopCtrl_.flagUnit_.flagUnitModel_.pos_.x} base {(int)tr.troopBasePos_[0]} | armies P1 {(cnt[0] > 0 ? (int)(sum[0] / cnt[0]) : -1)} P2 {(cnt[1] > 0 ? (int)(sum[1] / cnt[1]) : -1)} | fog {w?.fogLevel}";

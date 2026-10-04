@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using LiteNetLib;
@@ -107,6 +108,42 @@ public static class CoopNet
     {
         _server?.Poll();
         _net?.PollEvents();
+        DeliverDelayed();
+    }
+
+    // ------------------------------------------------------------------ test: a slower network
+
+    /// <summary>
+    /// Testing only (every copy on one PC has no network delay): hold each incoming room message this
+    /// long, plus up to <see cref="SimJitterMs"/>, and drop this share of the unreliable ones. Order
+    /// is kept. 0 (the default) passes everything straight through.
+    /// </summary>
+    public static int SimLatencyMs, SimJitterMs, SimLossPercent;
+    private static readonly Queue<(long Due, int Slot, ulong From, byte[] Payload)> Delayed = new();
+    private static readonly System.Random SimRandom = new();
+    private static long _lastDue;
+
+    private static void Received(int fromSlot, ulong from, byte[] payload, bool reliable)
+    {
+        if (SimLatencyMs <= 0 && SimLossPercent <= 0 && Delayed.Count == 0)
+        {
+            Message?.Invoke(fromSlot, from, payload);
+            return;
+        }
+        if (!reliable && SimRandom.Next(100) < SimLossPercent) return;
+        long due = Math.Max(_lastDue, Environment.TickCount64 + SimLatencyMs + (SimJitterMs > 0 ? SimRandom.Next(SimJitterMs + 1) : 0));
+        _lastDue = due;
+        Delayed.Enqueue((due, fromSlot, from, payload));
+    }
+
+    private static void DeliverDelayed()
+    {
+        long now = Environment.TickCount64;
+        while (Delayed.Count > 0 && Delayed.Peek().Due <= now)
+        {
+            var m = Delayed.Dequeue();
+            Message?.Invoke(m.Slot, m.From, m.Payload);
+        }
     }
 
     /// <summary>Send a game message to one slot (or -1 = everyone else in the room).</summary>
@@ -188,7 +225,7 @@ public static class CoopNet
                     ulong from = r.U64();
                     int fromSlot = r.I32();
                     var payload = r.Blob();
-                    if (payload != null) Message?.Invoke(fromSlot, from, payload);
+                    if (payload != null) Received(fromSlot, from, payload, method == DeliveryMethod.ReliableOrdered);
                     break;
             }
         }

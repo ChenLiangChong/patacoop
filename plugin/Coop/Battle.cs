@@ -98,7 +98,12 @@ public static class Battle
         SaveBackup.BeforeBattle(Lobby.NameOf(mission));
         Active = true;
         Preparing = true;
+        // before the mission sets itself up: its first rolls (which squads come) are keyed by this clock, and
+        // the last battle's count, which differs between machines, must not reach them
+        BattleClock.Reset();
+        SharedRandom.Start();
         EndAllowed = false;
+        _goalSent = false;
         MissionId = mission;
         Sent = Received = SyncSent = SyncReceived = 0;
         _announcedSync = false;
@@ -115,15 +120,22 @@ public static class Battle
         if (s != null) s.isMultiMode = true;
         StoryArmy.Reset();
         MarchRule.Reset();
+        ArmyPositions.Reset();
         WorldSync.BattleStarted();
         Clock.Reset();
         HitSync.Reset();
+        UnitIds.Reset();
         StoryCompanions.Reset();
         KeyItems.BattleStarted();
 
         // What Game.initialize does on its multiplayer path (we let it take the story path instead,
-        // which sets up the mission's miracles): the outgoing packet buffer, only the host may retreat,
-        // and the beat is fixed so every machine keeps the same rhythm. The Paragate carnival is left out.
+        // which sets up the mission's miracles): the outgoing packet buffer and only the host may retreat.
+        // Left out: the Paragate carnival, and the fixed rhythm. With a fixed rhythm the army answers
+        // only on every other bar line, so a command that ends anywhere else waits one to three beats
+        // before the army moves, and the player's next command then cuts that answer short; each
+        // player also gets a miss every cycle they do not drum, which would hold up the march for good.
+        // The beat itself stays shared without it (see Clock): only when the army answers follows the
+        // player's own drumming, as in a single-player battle.
         var send = game.sendPacketData;
         if (send != null && send.Packet == null)
         {
@@ -134,7 +146,7 @@ public static class Battle
         }
         game.enableReturnMessageBox(CoopNet.IsHost);
         var beat = game.soundDirector_?.beatCommander_;
-        if (beat != null) beat.isFixedRhythm_ = true;
+        if (beat != null) beat.isFixedRhythm_ = false;
         // normally grown when the game sets the stock up; this covers a stock set up before Prepare
         try { ActorPools.Grow(game.systemAccessor_?.pActorMng_?.pActorPool_?.TryCast<P2.Game.Actor.GameActorPool>()); }
         catch (Exception e) { CoopPlugin.L.LogWarning("could not grow the battle stock: " + e.Message); }
@@ -179,6 +191,28 @@ public static class Battle
             exit ? "房主離開了關卡：一起返回" : $"房主結束了關卡（{Text.Outcome(type)}）");
     }
 
+    private static bool _goalSent;
+
+    /// <summary>
+    /// A guest's own game cleared the mission: its army reached the goal first (every army walks on
+    /// its own). The host clears the mission for everyone, once.
+    /// </summary>
+    internal static void GuestReachedGoal()
+    {
+        if (!Active || CoopNet.IsHost || _goalSent) return;
+        _goalSent = true;
+        CoopNet.SendTo(0, new MsgWriter(Msg.Goal).ToArray(), true);
+        Session.Note("your army reached the goal", "你的部隊抵達終點了");
+    }
+
+    internal static void OnGoal(int fromSlot)
+    {
+        var game = Game.pGame_g;
+        if (!Active || !CoopNet.IsHost || game == null || game.isGameEndOrder_) return;
+        Session.Note($"{Session.Name(fromSlot)}'s army reached the goal", $"{Session.Name(fromSlot)} 的部隊抵達終點了");
+        game.setGameEnd(Game.GameEndType.GameEndType_Clear);
+    }
+
     /// <summary>A player left during the battle: their army fights on, following the host's drum.</summary>
     internal static void OnPlayerLeft(int slot, string name)
     {
@@ -208,6 +242,8 @@ public static class Battle
     {
         if (!Active) return;
         Active = false;
+        SharedRandom.Stop();
+        BattleClock.Reset();
         Difficulty.Reset();
         WorldSync.Reset();
         RestoreSinglePlayer();
@@ -426,12 +462,17 @@ internal static class SkipParagateGoalsPatch
 /// <summary>
 /// The host's mission end (clear, failure, retreat) is the battle's end for everyone; a client's
 /// own simulation may not end the battle by itself (it could differ slightly from the host's).
+/// A guest's clear is its army reaching the goal: the host is told, and clears it for everyone.
 /// </summary>
 [HarmonyPatch(typeof(Game), nameof(Game.setGameEnd))]
 internal static class GameEndPatch
 {
-    private static bool Prefix(Game __instance) =>
-        !Battle.Active || CoopNet.IsHost || Battle.EndAllowed || __instance.isGameEndOrder_;
+    private static bool Prefix(Game __instance, Game.GameEndType gameEndType)
+    {
+        if (!Battle.Active || CoopNet.IsHost || Battle.EndAllowed || __instance.isGameEndOrder_) return true;
+        if (gameEndType == Game.GameEndType.GameEndType_Clear) Battle.GuestReachedGoal();
+        return false;
+    }
 
     private static void Postfix(Game.GameEndType gameEndType)
     {
@@ -503,31 +544,18 @@ internal static class UpdateSendPatch
 }
 
 /// <summary>
-/// The host's troop position is the battle's. The multiplayer protocol also carries every client's
-/// own view of it (PD_TroopBasePos), and applying those on the host drags the army back to where a
-/// client, a few frames behind, last saw it: the two machines pull against each other and the army
-/// only inches forward on each march. The host keeps its position; clients still take the host's.
+/// Every machine's troop position is its own player's army (see <see cref="ArmyPositions"/>). The
+/// multiplayer protocol sends each machine's troop position every frame (PD_TroopBasePos) and
+/// overwrites the receiver's with it: the game's own multiplayer kept one army for everybody, moving
+/// in lockstep. Applying them would pull every army onto the others, so nobody takes them.
 /// </summary>
 [HarmonyPatch(typeof(P2.Game.Packet.PacketMng), nameof(P2.Game.Packet.PacketMng.procGamePacket))]
-internal static class HostKeepsTroopPositionPatch
+internal static class OwnTroopPositionPatch
 {
-    private static Il2CppStructArray<float>? Position() =>
-        Game.pGame_g?.getUnitMng()?.unitTroopPtrArray_?[0]?.troopBasePos_;
+    private const int TroopBasePos = 3; // P2.Game.Packet.PacketId.PID_TroopBasePos
 
-    private static void Prefix(out float __state)
-    {
-        __state = float.NaN;
-        if (!Battle.Active || !CoopNet.IsHost) return;
-        var pos = Position();
-        if (pos != null && pos.Length > 0) __state = pos[0];
-    }
-
-    private static void Postfix(float __state)
-    {
-        if (float.IsNaN(__state)) return;
-        var pos = Position();
-        if (pos != null && pos.Length > 0) pos[0] = __state;
-    }
+    private static bool Prefix(P2.Game.Packet.GamePacket pGamePacket) =>
+        !Battle.Active || (pGamePacket?.header?.id ?? 0) != TroopBasePos;
 }
 
 /// <summary>

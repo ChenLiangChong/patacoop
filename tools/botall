@@ -1,0 +1,16 @@
+#!/bin/bash
+# botall <mission...> : botrun every mission in turn (N=2 by default) and print one line per mission: how it ended,
+# whether the copies ever differed during play (enemies only on one side, hit points), and errors in the logs.
+T=$(cd "$(dirname "$0")" && pwd); . "$T/env.sh"; N=${N:-2}
+for m in "$@"; do
+  SECONDS_MAX=${SECONDS_MAX:-600} $T/botrun $m $N >/dev/null 2>&1
+  cmp=$W/tmp/cmp$m.txt
+  plays=$(grep -c "phases Play/Play" $cmp)
+  diff=$(grep -A1 "phases Play/Play" $cmp | grep -c "hit points differ on [1-9]\|only host \[[0-9]\|only copy [1-3] \[[0-9]")
+  gim=$(grep -c "gimmicks differing (host/copy): \[" $cmp)
+  ours=$(grep -A2 "phases Play/Play" $cmp | grep -c "our units:.*hit points differ on [1-9]")
+  end=$(grep -h "mission over\|ended the mission" "$G/BepInEx/LogOutput.log" | tail -1 | grep -o "GameEndType_[A-Za-z]*")
+  errs=$(cat "$G/BepInEx/LogOutput.log" "$G/BepInEx/LogOutput.1.log" | grep -c "Exception\|\[Error")
+  over=$(grep -q "battle over" $W/tmp/bot$m.txt && echo ended || echo "still playing at the time limit")
+  echo "mission $m: ${end:-no end} ($over); $plays comparisons in play, $diff with enemy differences, $gim with gimmick differences, $ours with our units' hit points differing; $errs errors"
+done

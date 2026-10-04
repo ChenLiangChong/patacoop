@@ -8,6 +8,8 @@ for n in $(seq 1 40); do
   [ "$sel" = "$want" ] && { echo "selected $want"; exit 0; }
   [ "$to" = "-1" ] && { echo "mission $want is not on the map"; exit 1; }
   if [ "$to" -lt "$at" ]; then key=Left; else key=Right; fi
-  $T/ge $i <<<"return Press(VirtualPad.$key, 6);" >/dev/null; sleep 1.5
+  $T/ge $i <<<"return Press(VirtualPad.$key, 6);" >/dev/null
+  # wait for the cursor to move (no fixed wait)
+  for k in $(seq 1 15); do sleep 0.2; r2=$($T/ge $i <<<"${Q//WANT/$want}" | head -1); [ "${r2%% *}" != "$sel" ] && break; done
 done
 echo "could not reach $want (at $sel)"; exit 1

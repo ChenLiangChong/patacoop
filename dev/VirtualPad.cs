@@ -37,7 +37,7 @@ public static class VirtualPad
         {
             Holds.RemoveAll(h => h.End < Now - 2);
             int start = Now + Math.Max(1, delayFrames);
-            Holds.Add(new Hold(mask, start, start + Math.Max(2, holdFrames)));
+            Holds.Add(new Hold(mask, start, start + Math.Max(1, holdFrames)));
         }
     }
 

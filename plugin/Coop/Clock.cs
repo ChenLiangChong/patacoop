@@ -6,6 +6,66 @@ using UnityEngine;
 namespace PataCoop.Coop;
 
 /// <summary>
+/// How far into the battle we are, in beat-timer ticks (80 a battle step): the same at the same
+/// battle step on every machine. The beat timer alone cannot tell. A miracle's rhythm game starts
+/// it again from 0 for the miracle's music, and the return to the battle music starts it from 0
+/// once more (and the step after that does not even count). That happens only on the machine of
+/// the player who drums the miracle. So this clock takes the beat timer's reading at the battle's
+/// first step and from then on counts battle steps (catch-up steps included).
+/// </summary>
+internal static class BattleClock
+{
+    internal const int TicksPerStep = 80;
+    /// <summary>Ticks per half beat (the battle's tempo, 120 beats a minute).</summary>
+    internal const int TicksPerHalfBeat = 1200;
+
+    private static bool _started;
+    private static uint _start;
+    private static long _steps, _openingSteps;
+
+    internal static void Reset()
+    {
+        _started = false;
+        _steps = _openingSteps = 0;
+    }
+
+    /// <summary>Steps before the battle's first one (loading, the mission's opening): how many differs between machines.</summary>
+    internal static long OpeningSteps => _openingSteps;
+
+    /// <summary>Before every battle step.</summary>
+    internal static void BeforeStep(P2.Game.Game game)
+    {
+        if (!Battle.Active) return;
+        if (game.gamePhase_ != P2.Game.Game.GamePhase.GamePhase_Play)
+        {
+            if (!_started) _openingSteps++;
+            return;
+        }
+        if (_started)
+        {
+            _steps++;
+            return;
+        }
+        _started = true;
+        _start = game.soundDirector_?.getBeatTimer()?.tick_ ?? 0;
+    }
+
+    /// <summary>True from the battle's first step (in Play) on.</summary>
+    internal static bool Started => _started;
+
+    /// <summary>Ticks into the battle (before its first step: the beat timer's own reading).</summary>
+    internal static long Ticks => _started
+        ? _start + _steps * TicksPerStep
+        : P2.Game.Game.pGame_g?.soundDirector_?.getBeatTimer()?.tick_ ?? 0;
+}
+
+[HarmonyPatch(typeof(P2.Game.Game), nameof(P2.Game.Game.update), new[] { typeof(uint) })]
+internal static class BattleClockStepPatch
+{
+    private static void Prefix(P2.Game.Game __instance) => BattleClock.BeforeStep(__instance);
+}
+
+/// <summary>
 /// One battle clock for everybody.
 ///
 /// The game moves its whole battle (music sequencer, beat, units) one fixed step per frame, so a
@@ -15,6 +75,8 @@ namespace PataCoop.Coop;
 /// it has caught up (music, beat and units together, a short fast-forward). Nobody ever waits:
 /// skipping a battle step makes the game abandon the mission. Differences under three steps
 /// (50 ms) are left alone.
+///
+/// The clocks compared are <see cref="BattleClock"/>s, which go on counting through a miracle.
 ///
 /// Measuring: a clock reading arrives some time after it was taken (network, the relay, the
 /// frame it waits for). Each message also carries what the sender measured of everybody else,
@@ -82,7 +144,7 @@ internal static class Clock
         var timer = Timer(game);
         if (!Playing(game) || timer == null) return;
         _nextSend = Time.frameCount + 10;
-        var w = new MsgWriter(Msg.Clock).U32(timer.tick_);
+        var w = new MsgWriter(Msg.Clock).U32((uint)BattleClock.Ticks);
         for (int p = 0; p < Session.MaxPlayers; p++) w.F32(Fresh(RawFrame[p]) ? (float)Raw[p] : float.NaN);
         CoopNet.SendAll(w.ToArray(), false);
     }
@@ -95,7 +157,7 @@ internal static class Clock
         var game = P2.Game.Game.pGame_g;
         var timer = Timer(game);
         if (fromSlot < 0 || fromSlot >= Ahead.Length || !Playing(game) || timer == null) return;
-        double raw = (double)theirTick - timer.tick_;   // their clock minus ours, late by the delay
+        double raw = (double)theirTick - (uint)BattleClock.Ticks;   // their clock minus ours, late by the delay
         Raw[fromSlot] = raw;
         RawFrame[fromSlot] = Time.frameCount;
         int me = CoopNet.MySlot;

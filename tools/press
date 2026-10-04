@@ -1,0 +1,5 @@
+#!/bin/bash
+# press <instance> <button> [hold frames] : press a pad button on copy <instance> (Cross, Circle, Square, Triangle,
+# Start, Select, Up, Down, Left, Right, L, R, GotoBattle; drums: Pata, Pon, Chaka, Don)
+i=${1:-0}; b=${2:?button}; hold=${3:-4}; . "$(dirname "$0")/env.sh"
+$T/ge $i <<<"return Press(VirtualPad.$b, $hold);" | head -1

@@ -1,0 +1,10 @@
+#!/bin/bash
+# statewatch <instance> [seconds] : print each change of copy <instance>'s state with the time it appeared
+i=${1:-0}; secs=${2:-120}; T=$(cd "$(dirname "$0")" && pwd)
+start=$(date +%s.%N); last=""
+while :; do
+  now=$(date +%s.%N); el=$(awk -v a="$now" -v b="$start" 'BEGIN{printf "%.1f", a-b}'); [ "${el%.*}" -ge "$secs" ] && break
+  s=$($T/state $i); s=${s:-unreachable}
+  [ "$s" != "$last" ] && { printf "%6.1fs [%s] %s\n" "$el" "$i" "$s"; last=$s; }
+  sleep 0.4
+done

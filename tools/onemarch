@@ -1,13 +1,29 @@
 #!/bin/bash
 # onemarch <solo|coop> [mission] : one PATA PATA PATA PON right after the battle starts; prints how far the troop went
 mode=${1:-coop}; mission=${2:-}; . "$(dirname "$0")/env.sh"
-if [ "$mode" = solo ]; then N=1; timeout 400 $T/redeploy 1 >/dev/null; $T/tocamp 0 >/dev/null; MISSION=$mission FROMCAMP=1 $T/tomission 0 >/dev/null
-else N=2; N=2 FULL=1 MISSION=$mission WAIT=60 $T/cooptest4 >/dev/null; fi
+rm -f "$W"/tmp/jev*.cmd "$W"/tmp/march*.txt
+if [ "$mode" = solo ]; then N=1; timeout 400 $T/redeploy 1 >/dev/null; $T/tocamp 0 >/dev/null; $T/ge 0 < $S/jevdriver.cs >/dev/null; MISSION=$mission FROMCAMP=1 $T/tomission 0 >/dev/null
+else N=2; N=2 FULL=1 MISSION=$mission ARM="jevdriver.cs" WAIT=60 $T/cooptest4 >/dev/null; fi
 LAST=$((N-1))
 for n in $(seq 1 60); do r=$($T/ge 0 <<<'var g = P2.Game.Game.pGame_g; return g == null ? "none" : g.gamePhase_.ToString();' | head -1); [[ "$r" == *Play* ]] && break; sleep 3; done
-sleep 3
+sleep 8
 B='var g = P2.Game.Game.pGame_g; return g.getUnitMng().unitTroopPtrArray_[0].troopBasePos_[0].ToString("F1");'
 for i in $(seq 0 $LAST); do b0[$i]=$($T/ge $i <<<"$B" | head -1); done
-for i in $(seq 0 $LAST); do $T/ge $i <<<'P2.Game.Game.pGame_g.soundDirector_.setAutoCommand(1, 1, true); return "pata";' >/dev/null; done
+for i in $(seq 0 $LAST); do $T/ge $i <<<'P2.Game.Game.pGame_g.soundDirector_.setAutoCommand(1, 2, true); return "pata";' >/dev/null; done
 sleep 10
 for i in $(seq 0 $LAST); do b1=$($T/ge $i <<<"$B" | head -1); echo "$mode copy $i: base ${b0[$i]} -> $b1 (one march: $(python3 -c "print(round($b1-${b0[$i]},1))"))"; done
+# movement per half beat around the march (from the driver's trace)
+for i in $(seq 0 $LAST); do python3 - "$W/tmp/march$i.txt" "$mode copy $i" <<'PY'
+import sys
+rows=[]
+for l in open(sys.argv[1]):
+    try: hb,x,c=l.split(); rows.append((int(hb),float(x),int(c)))
+    except ValueError: pass
+seen={}
+for hb,x,c in rows: seen[hb]=(x,c)
+hbs=sorted(seen); moving=[h for h in hbs if h+1 in seen and seen[h+1][0]-seen[h][0]>0.5]
+if moving:
+    a=moving[0]-10
+    print(sys.argv[2], ' '.join(f"{h}:{seen[h+1][0]-seen[h][0]:.0f}({seen[h][1]})" for h in range(a, a+26) if h in seen and h+1 in seen))
+PY
+done

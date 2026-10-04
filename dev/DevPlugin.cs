@@ -218,11 +218,21 @@ public static class DevServer
             status = 500;
             reply = e.ToString();
         }
-        var bytes = Encoding.UTF8.GetBytes(reply);
-        ctx.Response.StatusCode = status;
-        ctx.Response.ContentType = "text/plain; charset=utf-8";
-        ctx.Response.OutputStream.Write(bytes);
-        ctx.Response.Close();
+        // the caller may have given up waiting (a busy frame while the game loads): a reply to a closed
+        // connection throws, and an exception on this pool thread would end the whole game
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes(reply);
+            ctx.Response.StatusCode = status;
+            ctx.Response.ContentType = "text/plain; charset=utf-8";
+            ctx.Response.OutputStream.Write(bytes);
+            ctx.Response.Close();
+        }
+        catch (Exception e)
+        {
+            try { ctx.Response.Abort(); } catch { }
+            DevPlugin.L.LogDebug("reply not delivered: " + e.Message);
+        }
     }
 
     private static ScriptOptions Options()

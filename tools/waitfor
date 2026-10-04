@@ -1,0 +1,12 @@
+#!/bin/bash
+# waitfor <instance> <pattern> [seconds] : poll copy <instance>'s state until it matches the (grep -E) pattern;
+# prints how long it took and the state. Exit 1 on timeout, printing the last state.
+i=${1:-0}; pat=${2:?pattern}; secs=${3:-60}; T=$(cd "$(dirname "$0")" && pwd)
+start=$(date +%s%N)
+while :; do
+  s=$($T/state $i)
+  ms=$(( ($(date +%s%N) - start) / 1000000 ))
+  if echo "$s" | grep -qE "$pat"; then printf "[%s] %s after %.1fs\n" "$i" "$s" "$(echo "$ms/1000" | bc -l)"; exit 0; fi
+  [ $ms -ge $((secs * 1000)) ] && { echo "[$i] timeout after ${secs}s, still: $s"; exit 1; }
+  sleep 0.3
+done
