@@ -3,6 +3,8 @@ Add-Type @"
 using System; using System.Runtime.InteropServices;
 public static class W { [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags); }
 "@
+# unmute before closing: Windows keeps a program's mute setting from one run to the next
+& (Join-Path $PSScriptRoot 'mute.ps1') -Mute 0 | Out-Null
 Get-Process PATAPON12_REPLAY -EA SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null }
 Start-Sleep -Seconds 5
 Get-Process PATAPON12_REPLAY -EA SilentlyContinue | Stop-Process -Force

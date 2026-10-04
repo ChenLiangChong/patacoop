@@ -5,7 +5,10 @@
 # devmode undoes it.
 set -e
 . "$(dirname "$0")/env.sh"
-powershell.exe -NoProfile -NonInteractive -Command "Get-Process PATAPON12_REPLAY -EA SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 2" >/dev/null
+# unmute first and close normally: Windows keeps a program's mute setting from one run to the next,
+# and a muted test copy would otherwise leave the player's own game silent
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(wslpath -w "$T"/mute.ps1)" -Mute 0 >/dev/null 2>&1 || true
+powershell.exe -NoProfile -NonInteractive -Command "Get-Process PATAPON12_REPLAY -EA SilentlyContinue | ForEach-Object { \$_.CloseMainWindow() | Out-Null }; Start-Sleep -Seconds 6; Get-Process PATAPON12_REPLAY -EA SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 2" >/dev/null
 mkdir -p "$G/BepInEx/dev-disabled"
 if [ -d "$G/BepInEx/plugins/PataCoop.Dev" ]; then rm -rf "$G/BepInEx/dev-disabled/PataCoop.Dev"; mv "$G/BepInEx/plugins/PataCoop.Dev" "$G/BepInEx/dev-disabled/"; fi
 [ -f "$G/PATAPON12_REPLAY_Data/boot.config.bak-claude" ] && cp "$G/PATAPON12_REPLAY_Data/boot.config.bak-claude" "$G/PATAPON12_REPLAY_Data/boot.config"
