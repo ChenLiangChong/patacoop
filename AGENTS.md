@@ -98,7 +98,7 @@ Saves are backed up before every co-op battle to `BepInEx\PataCoop\save-backups\
 | Path | What |
 |---|---|
 | `plugin/` | The mod (`PataCoop.dll`). `Plugin.cs` entry/driver; `Overlay.cs` panel; `Ui.cs` home-made IMGUI widgets; `NameLabels.cs` player labels over armies; `Net/CoopNet.cs` client; `Net/RoomFinder.cs` LAN/Radmin room search. |
-| `plugin/Coop/` | Co-op logic. `Session` roster/hello. `Lobby` camp/HQ states, sortie gate. `Battle` battle lifecycle and packet filters. `Armies` per-player squads in one troop. `HitSync` host-owned HP/deaths/gimmicks. `Clock` beat alignment. `ArmyPositions` every army walks on its own drums (positions of armies, units and the host's enemies every frame; events and enemy arrivals follow the army furthest ahead). `MarchRule` own march, last command per player. `StoryCompanions` one story NPC per player. `ActorPools` battle object stock. `Difficulty`, `KeyItems`, `WorldSync` (weather), `MissionScripts`, `StoryArmy`, `SaveBackup`, `NetErrors`, `Messages` (message ids). |
+| `plugin/Coop/` | Co-op logic. `Session` roster/hello. `Lobby` camp/HQ states, sortie gate. `Battle` battle lifecycle and packet filters. `Armies` per-player squads in one troop. `HitSync` host-owned HP/deaths/gimmicks. `Clock` beat alignment. `ArmyPositions` every army walks on its own drums (positions of armies, units and the host's enemies every frame; events and enemy arrivals follow the army furthest ahead). `EnemyRoster` guests field the host's enemy squads. `MarchRule` own march, last command per player. `StoryCompanions` one story NPC per player. `ActorPools` battle object stock. `Difficulty`, `KeyItems`, `WorldSync` (weather), `MissionScripts`, `StoryArmy`, `SaveBackup`, `NetErrors`, `Messages` (message ids). |
 | `server/` | LiteNetLib relay (`RelayServer.cs`, `Wire.cs`), also compiled into the plugin (the host runs it in-game) and as a standalone server. |
 | `servertest/` | Relay test suite: start `server` on a port, then `dotnet servertest.dll <port>`. |
 | `dev/` | Dev-only plugin `PataCoop.Dev`: HTTP eval server (port 9100+instance), per-instance save sandbox, auto-mute, a native disassembler/indexer (`Native.Find/Dis/Index`). Never ship it. |
@@ -140,7 +140,10 @@ Saves are backed up before every co-op battle to `BepInEx\PataCoop\save-backups\
 - `tools/gshot i`: screenshot.
 - `tools/toworldmap i` opens the world map from anywhere in the camp. `tools/pickmission i <id>` moves its cursor to a mission; it reads the map's mission list, which also lists every unlocked mission with its type.
 - `N=2 FULL=1 tools/cooptest4`: the older launcher (relaunches, fixed waits); `coop` replaces it.
-  `FULL=1` gives everyone a full army. `ARM="a.cs b.cs"` arms hooks from `tools/evals`.
+  `FULL=1` fills everyone's army to four full squads (the hero kept); without it everyone brings the
+  save's own formation, as players do (`botrun` does that by default). Armies without a hero (the
+  old `FULL=1`) made the host's `UnitTroop.receiveCommand` throw null references in fever, which
+  never happened with heroes. `ARM="a.cs b.cs"` arms hooks from `tools/evals`.
 - `tools/evals/drumprobe.cs`: `DrumProbe.Play("0:A,2:A,4:A,6:D")` presses drums (A PATA,
   S DON, W CHAKA, D PON) at half beats after the next beat, each for exactly one battle step, the
   way a player's key arrives (fever, miracles and any command can be scripted this way).
@@ -215,6 +218,16 @@ Saves are backed up before every co-op battle to `BepInEx\PataCoop\save-backups\
   passes them. Both are shown the army furthest ahead, so every machine spawns the same squads in
   the same order. Enemy squad `uniqueId`s must match: `HitSync` matches units by unit and squad id.
   A guest's own clear (its army at the goal) is sent to the host (`Msg.Goal`), which clears for all.
+- **Which enemies are on the field:** a mission lists its enemy squads as candidates
+  (`UnitTroop.addSquadToAddingList`) and brings them in with `squadAddingCheck(checkX, id)`, by
+  place or by id from its script (then `addSquad(param, false)` and the candidate leaves the list).
+  A hunting ground's script picks its herds at the battle's first step after a burst of 100-odd
+  script rolls whose count differs between machines, so the picks differed. `EnemyRoster` makes
+  each guest field the host's squads: it brings in, by `squadAddingCheck(far away, id)`, any squad
+  the host reports (`Msg.EnemyPos`) and it lacks, takes away (`UnitBase.deleteUnit`, no death or
+  drops) any squad of its own the host has not reported for 1.5 s, and lets no squad come twice.
+  Only in the battle's first 10 s: later waves (fortresses) come in on every machine a moment apart,
+  and one brought in late from the host's report came whole while the host's had lost units.
 - **No fixed rhythm:** the engine's multiplayer path sets `BeatCommander.isFixedRhythm_`. With it,
   the army answers only on every other bar line: a command whose last drum lands anywhere else
   waits one to three beats, the player's next command cuts that answer short, and every player

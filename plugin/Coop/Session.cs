@@ -53,6 +53,7 @@ public static class Session
         WorldSync.Tick();
         Clock.Tick();
         ArmyPositions.Tick();
+        EnemyRoster.Tick();
         HitSync.Tick();
         Lobby.Tick();
     }

@@ -1,10 +1,11 @@
 #!/bin/bash
-# botrun <mission> [N] : relaunch N copies (default 2) with the fresh build, play the mission with the Jev bot (SPEED=2),
+# botrun <mission> [N] : relaunch N copies (default 2) with the fresh build, play the mission with the Jev bot (SPEED=2;
+# everyone brings the save's own formation, hero included; FULL=1 fills it to a full army),
 # and compare the copies every 10 s. Output: tmp/bot<mission>.txt (bot) and tmp/cmp<mission>.txt (comparisons).
 m=${1:?mission}; N=${2:-2}; T=$(cd "$(dirname "$0")" && pwd); . "$T/env.sh"
 out=$W/tmp/bot$m.txt; cmp=$W/tmp/cmp$m.txt; : > $cmp
 timeout 300 $T/redeploy $N >/dev/null
-(N=$N FULL=1 MISSION=$m SPEED=${SPEED:-2} SECONDS_MAX=${SECONDS_MAX:-900} $T/jevcoop > $out 2>&1 &)
+(N=$N FULL=$FULL MISSION=$m SPEED=${SPEED:-2} SECONDS_MAX=${SECONDS_MAX:-900} $T/jevcoop > $out 2>&1 &)
 until grep -q "jev drums\|stuck\|not " $out 2>/dev/null; do sleep 2; done
 for k in $(seq 1 200); do
   echo "--- $(date +%H:%M:%S)" >> $cmp; $T/compare $N 2>&1 | grep -E "vs host|enemies:|our units|gimmicks|phase" >> $cmp

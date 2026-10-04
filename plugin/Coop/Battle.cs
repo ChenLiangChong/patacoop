@@ -101,6 +101,7 @@ public static class Battle
         // before the mission sets itself up: its first rolls (which squads come) are keyed by this clock, and
         // the last battle's count, which differs between machines, must not reach them
         BattleClock.Reset();
+        EnemyRoster.Reset(); // before the mission lists its enemy candidates
         SharedRandom.Start();
         EndAllowed = false;
         _goalSent = false;

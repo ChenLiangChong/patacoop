@@ -21,26 +21,18 @@ internal static class BattleClock
 
     private static bool _started;
     private static uint _start;
-    private static long _steps, _openingSteps;
+    private static long _steps;
 
     internal static void Reset()
     {
         _started = false;
-        _steps = _openingSteps = 0;
+        _steps = 0;
     }
-
-    /// <summary>Steps before the battle's first one (loading, the mission's opening): how many differs between machines.</summary>
-    internal static long OpeningSteps => _openingSteps;
 
     /// <summary>Before every battle step.</summary>
     internal static void BeforeStep(P2.Game.Game game)
     {
-        if (!Battle.Active) return;
-        if (game.gamePhase_ != P2.Game.Game.GamePhase.GamePhase_Play)
-        {
-            if (!_started) _openingSteps++;
-            return;
-        }
+        if (!Battle.Active || game.gamePhase_ != P2.Game.Game.GamePhase.GamePhase_Play) return;
         if (_started)
         {
             _steps++;

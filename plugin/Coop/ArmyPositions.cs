@@ -138,6 +138,7 @@ internal static class ArmyPositions
             float x = r.F32();
             if (float.IsNaN(x)) continue;
             Enemies[(squad, place)] = Enemies.TryGetValue((squad, place), out var u) ? (x, u.Shown) : (x, float.NaN);
+            EnemyRoster.HostHas(squad);
         }
     }
 
