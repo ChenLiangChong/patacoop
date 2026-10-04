@@ -55,12 +55,15 @@ internal static class MarchRule
     }
 
     /// <summary>The multiplayer march's own test: a command of type 1, id 1 (march, in any fever or class variant).</summary>
-    private static bool IsMarch(UnitTroop troop, InstructionParam.Command command)
+    internal static bool IsMarch(UnitTroop troop, InstructionParam.Command command)
     {
         if (command == InstructionParam.Command.Command_None) return false;
         var param = troop.aInstructionParam_?[0]?.getInstCmdParam(command);
         return param != null && param.commandType == 1 && param.commandId == 1;
     }
+
+    /// <summary>The command this player drummed last.</summary>
+    internal static InstructionParam.Command LastOf(int player) => LastCommand[player];
 
     /// <summary>Where a player stands for the march: not counted (idle), marching, or holding the army up.</summary>
     internal enum Stance { Idle, March, Other }
@@ -153,7 +156,8 @@ internal static class DrumSeenPatch
     {
         if (!Battle.Active || P2.Game.Game.pGame_g?.gamePhase_ != P2.Game.Game.GamePhase.GamePhase_Play) return;
         if ((int)(__instance.troopInfo_?.troopType ?? (TroopType)(-1)) != 0) return;
-        MarchRule.Drummed(playerId, pCommandParam?.command ?? InstructionParam.Command.Command_None);
+        // our own drum can come without a player id: it is ours
+        MarchRule.Drummed(playerId < 0 ? CoopNet.MySlot : playerId, pCommandParam?.command ?? InstructionParam.Command.Command_None);
     }
 }
 
@@ -213,26 +217,32 @@ internal static class MarchRulePatch
             flag.isGripped_ = true;
         }
 
+        // The single-player march moves the troop by the first player's command at the full pace; the
+        // multiplayer march walks at well under half that pace and stops early in each measure. So our
+        // troop marches by the single-player rules, and "everyone marches together" is decided here:
+        // the first player's command becomes the march when every drumming player marches, and the
+        // command of whoever holds the army up otherwise.
         var inst = troop.aInstructionParam_;
-        if (inst == null || inst.Length == 0) return;
-        int now = MarchRule.Now(), lead = -1;
-        var active = new bool[inst.Length];
-        for (int p = 0; p < inst.Length; p++)
+        if (inst == null || inst.Length == 0 || inst[0] == null) return;
+        st.StoryRules = true;
+        st.WasMultiMode = s.isMultiMode;
+        s.isMultiMode = false;
+        int now = MarchRule.Now(), blocker = -1;
+        InstructionParam.Command? march = null;
+        for (int p = 0; p < inst.Length && p < Session.MaxPlayers; p++)
         {
-            active[p] = inst[p] != null && MarchRule.Active(troop, p, now);
-            if (active[p] && lead < 0) lead = p;
+            if (inst[p] == null || !MarchRule.Active(troop, p, now)) continue;
+            if (MarchRule.Marching(troop, p, now)) march ??= MarchRule.LastOf(p);
+            else if (blocker < 0) blocker = p;
         }
-        if (lead < 0) lead = 0; // nobody drums: the host's last command stands
-        st.Saved = new InstructionParam.Command[inst.Length];
-        for (int p = 0; p < inst.Length; p++)
+        st.Saved = new InstructionParam.Command[] { inst[0].lastActionCmd_ };
+        st.SavedCount = 1;
+        if (blocker >= 0)
         {
-            if (inst[p] == null) continue;
-            st.Saved[p] = inst[p].lastActionCmd_;
-            st.SavedCount = p + 1;
-            if (p == lead || inst[lead] == null) continue;
-            // idle players don't hold the march back; marching players keep the lead's pace
-            if (!active[p] || MarchRule.Marching(troop, p, now)) inst[p].lastActionCmd_ = inst[lead].lastActionCmd_;
+            var held = inst[blocker].lastActionCmd_;
+            inst[0].lastActionCmd_ = MarchRule.IsMarch(troop, held) ? InstructionParam.Command.Command_Stay : held;
         }
+        else if (march is { } m) inst[0].lastActionCmd_ = m;
     }
 
     /// <summary>Runs after the march even when it (or the prefix) threw.</summary>

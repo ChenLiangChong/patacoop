@@ -532,25 +532,35 @@ internal static class HostKeepsTroopPositionPatch
 
 /// <summary>
 /// The multiplayer protocol names squads and units by their ids (squad control and state, kill
-/// squad, unit hit points, kill unit, wake unit). In the game's own multiplayer every player had a
-/// single squad and the ids never clashed; in co-op the host's first squads and a mission's own
-/// squads can share an id, and a client's "squad 1 is gone" (a story companion fading) kills the
-/// host's squad 1 instead. Hit points and deaths are the host's word through <see cref="HitSync"/>,
-/// so these packets are left out in both directions. So is "gimmick broken" (PID_KillGimmick): HitSync
-/// already replays the break on guests, and the game's own handler ran each break's event script
-/// (drops included) a second time.
+/// squad, unit hit points, kill unit, wake unit); every such packet starts with the troop it is
+/// about. In the game's own multiplayer every player had a single squad and the ids never clashed;
+/// in co-op the host's first squads and a mission's own squads can share an id, and a client's
+/// "squad 1 is gone" (a story companion fading) killed the host's squad 1 instead. So packets about
+/// our own troop are left out in both directions: hit points and deaths there are the host's word
+/// through <see cref="HitSync"/>. Packets about the enemy troop still go from the host to the
+/// guests (enemy squads do not clash); without them a guest's enemies decided on their own (hunted
+/// animals fleeing, squads leaving the field) and the screens drifted apart. The host takes none.
+/// "Gimmick broken" (PID_KillGimmick) is left out too: HitSync already replays the break on guests,
+/// and the game's own handler ran each break's event script (drops included) a second time.
 /// </summary>
 [HarmonyPatch(typeof(P2.Game.Packet.PacketMng), nameof(P2.Game.Packet.PacketMng.procGamePacket))]
 internal static class SquadPacketsOffPatch
 {
-    // P2.Game.Packet.PacketId: PID_SquadCtrl = 4 ... PID_WakeupUnit = 9, PID_KillGimmick = 10
-    private const int FirstById = 4, LastById = 10;
+    // P2.Game.Packet.PacketId: PID_SquadCtrl = 4 ... PID_WakeupUnit = 9 (troop first), PID_KillGimmick = 10
+    private const int FirstById = 4, LastById = 9, KillGimmick = 10;
+    private const int EnemyTroop = 1; // the player troop is 0
 
     [HarmonyPriority(Priority.First)]
     private static bool Prefix(P2.Game.Packet.GamePacket pGamePacket)
     {
         if (!Battle.Active) return true;
         int id = pGamePacket?.header?.id ?? 0;
-        return id < FirstById || id > LastById;
+        if (id == KillGimmick) return false;
+        if (id < FirstById || id > LastById) return true;
+        if (CoopNet.IsHost) return false;
+        var data = pGamePacket!.data?.data;
+        if (data == null || data.Length < 4) return false;
+        int troop = data[0] | data[1] << 8 | data[2] << 16 | data[3] << 24;
+        return troop == EnemyTroop;
     }
 }

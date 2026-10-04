@@ -1,0 +1,40 @@
+#!/bin/bash
+# marchab <solo|coop> [mission] (default: the highlighted one) : every copy only marches (auto drum) for MARCH_SECONDS; prints the
+# troop's distance per march cycle (16 half beats) from the march trace, to compare solo and co-op
+mode=${1:-solo}; mission=${2:-}; . "$(dirname "$0")/env.sh"
+secs=${MARCH_SECONDS:-15}
+if [ "$mode" = solo ]; then N=1; else N=${N:-2}; fi; LAST=$((N-1))
+rm -f "$W"/tmp/jev*.cmd "$W"/tmp/jev*.json
+for i in $(seq 0 $LAST); do [ -f "$W/tmp/march$i.txt" ] && mv -f "$W/tmp/march$i.txt" "$W/tmp/march$i.prev.txt"; done
+if [ "$mode" = solo ]; then
+  timeout 400 $T/redeploy 1 | tail -1; $T/tocamp 0 >/dev/null
+  $T/ge 0 < $S/jevdriver.cs | head -1
+  MISSION=$mission FROMCAMP=1 $T/tomission 0 | tail -1
+else
+  N=$N FULL=1 MISSION=$mission ARM="jevdriver.cs" WAIT=90 $T/cooptest4 | tail -$N
+fi
+for n in $(seq 1 60); do r=$($T/ge 0 <<<'var g = P2.Game.Game.pGame_g; return g == null ? "none" : g.gamePhase_.ToString();' | head -1); [[ "$r" == *Play* ]] && break; sleep 5; done
+echo "battle: $r"
+# EXP=<eval file> : arm an experiment in every copy once the battle runs; SPEED=n : fast-forward
+for i in $(seq 0 $LAST); do for e in $EXP; do $T/ge $i < $S/$e | head -1; done; done
+[ -n "$SPEED" ] && for i in $(seq 0 $LAST); do $T/ge $i <<<"foreach (var a in System.AppDomain.CurrentDomain.GetAssemblies()) { System.Type[] ts; try { ts = a.GetTypes(); } catch { continue; } foreach (var t in ts) if (t.Name == \"JevDriver\") t.GetField(\"Speed\").SetValue(null, $SPEED); } return \"speed $SPEED\";" >/dev/null; done
+for i in $(seq 0 $LAST); do $T/ge $i <<<'P2.Game.Game.pGame_g?.soundDirector_.setAutoCommand(1, 99, true); return "march";' >/dev/null; done
+sleep $secs
+for i in $(seq 0 $LAST); do
+  python3 - "$W/tmp/march$i.txt" "$mode copy $i" <<'PY'
+import sys, statistics
+march = {1, 8, 15, 22, 29}
+rows = {}
+for line in open(sys.argv[1]):
+    try: hb, x, c = line.split(); rows[int(hb)] = (float(x), int(c))
+    except ValueError: pass
+hbs = sorted(rows)
+d = [rows[h + 16][0] - rows[h][0] for h in hbs if h + 16 in rows and all(rows.get(k, (0, -1))[1] in march for k in range(h, h + 17))]
+per = [rows[b][0] - rows[a][0] for a, b in zip(hbs, hbs[1:]) if b == a + 1 and rows[a][1] in march]
+cmds = {}
+for h in hbs: cmds[rows[h][1]] = cmds.get(rows[h][1], 0) + 1
+print(f"{sys.argv[2]}: {len(hbs)} half beats, x {rows[hbs[0]][0]:.0f} -> {rows[hbs[-1]][0]:.0f}, commands {cmds}")
+if d: print(f"  per march cycle (16 half beats, all march): median {statistics.median(d):.1f}, max {max(d):.1f}, n={len(d)}")
+if per: print(f"  per marching half beat: mean {statistics.mean(per):.2f}")
+PY
+done
