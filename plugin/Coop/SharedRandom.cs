@@ -12,11 +12,8 @@ namespace PataCoop.Coop;
 /// frames. So each of those rolls is seeded on its own from what every machine agrees on: the
 /// battle's seed (the host's, sent with the sortie), which roll it is (script, squad), the battle
 /// step (<see cref="BattleClock"/>, the same at the same step everywhere, miracles or not) and how
-/// many such rolls came before it in that step. Before the battle's first step every roll of a
-/// script gives the same number: scripts keep time while the machines wait for each other
-/// before the mission's opening, then run the waited ticks in one step, rolling once per tick (a
-/// hunting ground picks its herds there). How long each machine waited, and so how many rolls it
-/// made, depends on the network, so no number there may depend on the count. Unity's own random state is put back afterwards, so weather, particles,
+/// many such rolls came before it in that step. Rolls before the battle's first step (setting up,
+/// the mission's opening) are counted apart from the battle's, so the opening cannot shift them. Unity's own random state is put back afterwards, so weather, particles,
 /// damage spread and result chests keep their own randomness.
 /// </summary>
 internal static class SharedRandom
@@ -51,19 +48,18 @@ internal static class SharedRandom
     {
         if (!_ready || !Battle.Active && !Battle.Preparing) return null;
         bool battle = BattleClock.Started;
-        var bucket = (battle, battle ? (uint)BattleClock.Ticks : (uint)BattleClock.OpeningSteps);
+        var bucket = (battle, battle ? (uint)BattleClock.Ticks : 0u);
         if (bucket != _bucket)
         {
             _bucket = bucket;
             RollsThisStep.Clear();
         }
-        uint tick = battle ? bucket.Item2 : 0;
+        uint tick = bucket.Item2;
         RollsThisStep.TryGetValue((kind, who), out int n);
         RollsThisStep[(kind, who)] = n + 1;
-        Trace?.Add($"{P2.Game.Game.pGame_g?.gamePhase_.ToString().Replace("GamePhase_", "") ?? "-"} {(battle ? "battle" : "opening")} t{bucket.Item2} k{kind} w{who} n{n}");
+        Trace?.Add($"{(battle ? "battle" : "opening")} t{bucket.Item2} k{kind} w{who} n{n}");
         var outside = UnityEngine.Random.state;
-        UnityEngine.Random.InitState(battle ? Mix(Seed, kind, who, 1, (int)tick, n)
-            : kind == ScriptRoll ? Mix(Seed, kind, who, 0) : Mix(Seed, kind, who, 0, 0, n));
+        UnityEngine.Random.InitState(Mix(Seed, kind, who, battle ? 1 : 0, (int)tick, n));
         return outside;
     }
 

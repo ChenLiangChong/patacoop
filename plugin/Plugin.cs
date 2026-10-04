@@ -17,7 +17,7 @@ namespace PataCoop;
 public sealed class CoopPlugin : BasePlugin
 {
     public const string Guid = "com.patacoop.coop";
-    public const string Version = "0.4.2";
+    public const string Version = "0.4.3";
 
     internal static ManualLogSource L = null!;
     public static ConfigEntry<string> PlayerName = null!;
